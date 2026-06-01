@@ -275,7 +275,7 @@ async function send() {
 
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 45000);
+    const timeout = setTimeout(() => controller.abort(), 75000);
     const r = await fetch(chatUrl, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
@@ -434,7 +434,7 @@ async def chat_endpoint(request: dict):
             tools=tools,
             temperature=0.7,
             max_tokens=500,
-            timeout=25
+            timeout=15
         )
 
         # 处理 LLM 响应和工具调用
@@ -593,11 +593,10 @@ async def openclaw_chat(request: dict):
         resp = req.post(
             "http://localhost:18789/api/chat",
             json={"message": request.get("message","")},
-            timeout=10
+            timeout=5
         )
         data = resp.json()
-        reply = data.get("reply") or data.get("response") or data.get("text") or str(data)
-        return {"reply": reply, "user_id": user_id}
+        return {"reply": data.get("reply") or data.get("response") or str(data), "user_id": user_id}
     except:
         return await chat_endpoint(request)
 
