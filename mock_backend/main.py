@@ -538,7 +538,14 @@ def root():
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "ws_active": world_state._running if world_state else False}
+    import os
+    key = os.environ.get("OPENAI_API_KEY", "")
+    return {
+        "status": "ok",
+        "ws_active": world_state._running if world_state else False,
+        "api_key_set": bool(key),
+        "api_key_preview": (key[:8] + "..." + key[-4:]) if key else "NOT SET",
+    }
 
 @app.get("/debug/env")
 def debug_env():
