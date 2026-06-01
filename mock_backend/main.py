@@ -593,14 +593,12 @@ async def openclaw_chat(request: dict):
         resp = req.post(
             "http://localhost:18789/api/chat",
             json={"message": request.get("message","")},
-            timeout=25
+            timeout=10
         )
         data = resp.json()
-        # OpenClaw 返回格式可能不同，统一提取文本
         reply = data.get("reply") or data.get("response") or data.get("text") or str(data)
         return {"reply": reply, "user_id": user_id}
     except:
-        # 降级到自定义 AI
         return await chat_endpoint(request)
 
 
