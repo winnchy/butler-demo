@@ -413,14 +413,26 @@ async def chat_endpoint(request: dict):
             base_url="https://api.deepseek.com/v1"
         )
 
-        # 定义工具
+        # 定义工具（对应 mock_backend 所有 API，覆盖 5 个 Skill）
         tools = [
-            {"type":"function","function":{"name":"recommend_restaurant","description":"推荐餐厅","parameters":{"type":"object","properties":{"cuisine":{"type":"string","description":"菜系"},"budget":{"type":"integer","description":"人均预算"},"user_id":{"type":"string"}},"required":["user_id"]}}},
-            {"type":"function","function":{"name":"get_weather","description":"获取北京当前天气","parameters":{"type":"object","properties":{}}}},
-            {"type":"function","function":{"name":"get_outfit","description":"获取穿搭建议","parameters":{"type":"object","properties":{"user_id":{"type":"string"}},"required":["user_id"]}}},
-            {"type":"function","function":{"name":"plan_route","description":"路径规划","parameters":{"type":"object","properties":{"origin":{"type":"string"},"destination":{"type":"string"},"user_type":{"type":"string"}},"required":["origin","destination"]}}},
-            {"type":"function","function":{"name":"get_events","description":"获取周末活动","parameters":{"type":"object","properties":{"type":{"type":"string","description":"kids/market/exhibition/all"}},"required":[]}}},
-            {"type":"function","function":{"name":"get_schedule","description":"查询今日日程","parameters":{"type":"object","properties":{"user_id":{"type":"string"}},"required":["user_id"]}}},
+            # dining-butler
+            {"type":"function","function":{"name":"restaurant_recommend","description":"推荐餐厅，支持菜系/预算/设施/过敏过滤","parameters":{"type":"object","properties":{"cuisine":{"type":"string"},"budget":{"type":"integer"},"user_id":{"type":"string"},"must_have":{"type":"string","description":"baby_seat/parking/private_room/pet_allowed"}},"required":["user_id"]}}},
+            {"type":"function","function":{"name":"restaurant_queue","description":"查餐厅排队状态","parameters":{"type":"object","properties":{"restaurant_id":{"type":"integer"}},"required":["restaurant_id"]}}},
+            {"type":"function","function":{"name":"restaurant_emergency","description":"突发兜底：暴雨/满座/迟到时的替代方案","parameters":{"type":"object","properties":{"emergency_type":{"type":"string","description":"weather/full/late"},"current_lat":{"type":"number"},"current_lng":{"type":"number"},"has_child":{"type":"boolean"}},"required":["emergency_type","current_lat","current_lng"]}}},
+            # mobility-butler
+            {"type":"function","function":{"name":"plan_route","description":"多模式路径规划：驾车/地铁/骑行/步行/打车","parameters":{"type":"object","properties":{"origin_lat":{"type":"number"},"origin_lon":{"type":"number"},"dest_lat":{"type":"number"},"dest_lon":{"type":"number"},"user_type":{"type":"string"}},"required":["origin_lat","origin_lon","dest_lat","dest_lon"]}}},
+            {"type":"function","function":{"name":"transport_search","description":"查机票/火车票(模拟)","parameters":{"type":"object","properties":{"origin_city":{"type":"string"},"dest_city":{"type":"string"},"transport_type":{"type":"string","description":"flight/train/all"}},"required":["origin_city","dest_city"]}}},
+            {"type":"function","function":{"name":"nearby_facilities","description":"周边设施：加油站/充电桩/便利店/停车场","parameters":{"type":"object","properties":{"lat":{"type":"number"},"lon":{"type":"number"},"facility_type":{"type":"string"}},"required":["lat","lon","facility_type"]}}},
+            # outfit-advisor
+            {"type":"function","function":{"name":"get_weather","description":"北京当前天气+预警","parameters":{"type":"object","properties":{}}}},
+            {"type":"function","function":{"name":"get_outfit","description":"穿搭建议(基于温度+用户身份)","parameters":{"type":"object","properties":{"user_id":{"type":"string"}},"required":["user_id"]}}},
+            {"type":"function","function":{"name":"get_wardrobe","description":"查用户衣橱+缺失物品","parameters":{"type":"object","properties":{"user_id":{"type":"string"}},"required":["user_id"]}}},
+            # city-explorer
+            {"type":"function","function":{"name":"get_events","description":"周末活动：展览/市集/演出/亲子","parameters":{"type":"object","properties":{"type":{"type":"string","description":"exhibition/show/market/kids/all"},"user_id":{"type":"string"}},"required":[]}}},
+            {"type":"function","function":{"name":"get_shopping","description":"商场促销","parameters":{"type":"object","properties":{"category":{"type":"string","description":"clothing/electronics/home/child/all"}},"required":[]}}},
+            # life-organizer
+            {"type":"function","function":{"name":"get_schedule","description":"今日日程","parameters":{"type":"object","properties":{"user_id":{"type":"string"}},"required":["user_id"]}}},
+            {"type":"function","function":{"name":"search_memory","description":"搜索用户偏好记忆","parameters":{"type":"object","properties":{"user_id":{"type":"string"},"keyword":{"type":"string"}},"required":["user_id"]}}},
         ]
 
         response = client.chat.completions.create(
@@ -444,55 +456,106 @@ async def chat_endpoint(request: dict):
             import requests
             for tc in choice.message.tool_calls:
                 fn = tc.function
+                try: args = json_mod.loads(fn.arguments)
+                except: args = {}
+
                 try:
-                    args = json_mod.loads(fn.arguments)
-                except:
-                    args = {}
+                    if fn.name == "restaurant_recommend":
+                        r = requests.post("http://localhost:8000/api/dining/recommend",json={"user_id":user_id,"cuisine":args.get("cuisine"),"budget_per_person":args.get("budget"),"latitude":39.925,"longitude":116.59,"must_have":args.get("must_have","").split(",") if args.get("must_have") else None})
+                        recs = r.json().get("recommendations",[])[:3]
+                        if recs:
+                            reply += "\n\n"
+                            for rec in recs:
+                                reply += f"🍽️ **{rec['name']}** | {rec['cuisine']} | ⭐{rec['rating']} | ¥{rec['avg_price']}/人 | {rec.get('status','')}\n  {', '.join(rec.get('match_reasons',[])[:2])}\n"
 
-                if fn.name == "recommend_restaurant":
-                    r = requests.post("http://localhost:8000/api/dining/recommend",json={"user_id":user_id,"cuisine":args.get("cuisine"),"budget_per_person":args.get("budget"),"latitude":39.925,"longitude":116.59})
-                    recs = r.json().get("recommendations",[])[:3]
-                    if recs:
-                        reply += "\n\n"
-                        for rec in recs:
-                            reply += f"🍽️ **{rec['name']}** | {rec['cuisine']} | ⭐{rec['rating']} | ¥{rec['avg_price']}/人 | {rec.get('status','')}\n"
+                    elif fn.name == "restaurant_queue":
+                        rid = args.get("restaurant_id",0)
+                        r = requests.get(f"http://localhost:8000/api/dining/queue?restaurant_id={rid}")
+                        q = r.json()
+                        reply += f"\n当前排队{q.get('current_queue',0)}桌，预计等{q.get('estimated_wait_min',0)}分钟"
 
-                elif fn.name == "get_weather":
-                    r = requests.get("http://localhost:8000/api/weather/current")
-                    w = r.json()
-                    reply += f"\n\n🌤 北京 {w.get('condition','')} {w.get('temperature','')}°C | AQI {w.get('aqi','')}({w.get('aqi_level','')})"
+                    elif fn.name == "restaurant_emergency":
+                        r = requests.post("http://localhost:8000/api/dining/emergency-plan",json={"user_id":user_id,"emergency_type":args.get("emergency_type","weather"),"current_lat":args.get("current_lat",39.925),"current_lng":args.get("current_lng",116.59),"has_child":args.get("has_child",False)})
+                        plan = r.json().get("priority_plan",{})
+                        reply += f"\n\n🔔 突发兜底：{plan.get('message','已为你找到替代方案')}"
 
-                elif fn.name == "get_outfit":
-                    r = requests.get(f"http://localhost:8000/api/outfit/suggest?user_id={user_id}")
-                    o = r.json()
-                    reply += f"\n\n👔 {o.get('base_suggestion','')}：{', '.join(o.get('recommended_items',[])[:5])}"
+                    elif fn.name == "plan_route":
+                        r = requests.post("http://localhost:8000/api/mobility/route",json={"origin_lat":args.get("origin_lat",39.925),"origin_lon":args.get("origin_lon",116.59),"dest_lat":args.get("dest_lat",39.91),"dest_lon":args.get("dest_lon",116.46),"user_type":user_id})
+                        opts = r.json().get("options",[])[:3]
+                        if opts:
+                            reply += "\n\n"
+                            for o in opts:
+                                reply += f"{'🚗🚇🚲🚶🚕'[['driving','transit','cycling','walking','taxi'].index(o['mode'])] if o['mode'] in ['driving','transit','cycling','walking','taxi'] else '📍'} {o['mode']} {o['time_min']}分钟 | ¥{o.get('cost_yuan',0)}\n"
 
-                elif fn.name == "plan_route":
-                    # 使用默认起终点
-                    r = requests.post("http://localhost:8000/api/mobility/route",json={"origin_lat":39.925,"origin_lon":116.59,"dest_lat":39.91,"dest_lon":116.46,"user_type":user_id})
-                    opts = r.json().get("options",[])[:2]
-                    if opts:
-                        reply += "\n\n"
-                        for o in opts:
-                            reply += f"🚗 {o['mode']} {o['time_min']}分钟 | ¥{o.get('cost_yuan',0)}\n"
+                    elif fn.name == "transport_search":
+                        r = requests.get(f"http://localhost:8000/api/mobility/transport/search?origin_city={args.get('origin_city','北京')}&dest_city={args.get('dest_city','上海')}&transport_type={args.get('transport_type','all')}")
+                        results = r.json().get("results",[])[:3]
+                        if results:
+                            reply += "\n\n"
+                            for t in results:
+                                reply += f"✈️🚄 {t['type']} {t.get('departure','')}-{t.get('arrival','')} | ¥{t.get('price','?')} | {'延误!'+str(t.get('delay_min'))+'min' if t.get('status')=='delayed' else t.get('seats_left','?')+'座'}\n"
 
-                elif fn.name == "get_events":
-                    r = requests.get(f"http://localhost:8000/api/city/events?type={args.get('type','all')}&user_id={user_id}")
-                    events = r.json().get("events",[])[:3]
-                    if events:
-                        reply += "\n\n"
-                        for e in events:
-                            reply += f"🎯 {e['name']} | {e['location']} | {e.get('date','')}\n"
+                    elif fn.name == "nearby_facilities":
+                        r = requests.get(f"http://localhost:8000/api/mobility/nearby?lat={args.get('lat',39.925)}&lon={args.get('lon',116.59)}&facility_type={args.get('facility_type','gas_station')}")
+                        facs = r.json().get("facilities",[])[:3]
+                        if facs:
+                            reply += "\n\n"
+                            for f in facs:
+                                reply += f"📍 {f['name']} | {f['distance_km']}km\n"
 
-                elif fn.name == "get_schedule":
-                    r = requests.get(f"http://localhost:8000/api/schedule/today?user_id={user_id}")
-                    scheds = r.json().get("schedules",[])
-                    if scheds:
-                        reply += "\n\n"
-                        for s in scheds:
-                            reply += f"📌 {s['time']} {s['title']}\n"
-                    else:
-                        reply += "\n\n今天没有日程安排。"
+                    elif fn.name == "get_weather":
+                        r = requests.get("http://localhost:8000/api/weather/current")
+                        w = r.json()
+                        reply += f"\n\n🌤 北京 {w.get('condition','?')} {w.get('temperature','?')}°C | 体感{w.get('feels_like','?')}°C | AQI{w.get('aqi','?')}({w.get('aqi_level','?')})"
+                        if w.get('alerts'):
+                            for a in w['alerts']:
+                                reply += f"\n⚠️ {a.get('type','')}"
+
+                    elif fn.name == "get_outfit":
+                        r = requests.get(f"http://localhost:8000/api/outfit/suggest?user_id={user_id}")
+                        o = r.json()
+                        reply += f"\n\n👔 {o.get('base_suggestion','?')}：{', '.join(o.get('recommended_items',[])[:5])}"
+
+                    elif fn.name == "get_wardrobe":
+                        r = requests.get(f"http://localhost:8000/api/wardrobe?user_id={user_id}")
+                        wb = r.json()
+                        reply += f"\n\n👗 衣橱：上装{wb.get('tops',[])[:3]} 下装{wb.get('bottoms',[])[:2]} 缺：{', '.join(wb.get('missing',[]))}"
+
+                    elif fn.name == "get_events":
+                        r = requests.get(f"http://localhost:8000/api/city/events?type={args.get('type','all')}&user_id={user_id}")
+                        events = r.json().get("events",[])[:3]
+                        if events:
+                            reply += "\n\n"
+                            for e in events:
+                                reply += f"🎯 {e['name']} | {e['location']} | {e.get('date','')} | ¥{e.get('price',{}).get('regular','?')}\n"
+
+                    elif fn.name == "get_shopping":
+                        r = requests.get(f"http://localhost:8000/api/city/shopping?category={args.get('category','all')}")
+                        promos = r.json().get("promotions",[])[:3]
+                        if promos:
+                            reply += "\n\n"
+                            for p in promos:
+                                reply += f"🛍️ {p['mall']}：{p['promotion']}（至{p.get('valid_until','?')}）\n"
+
+                    elif fn.name == "get_schedule":
+                        r = requests.get(f"http://localhost:8000/api/schedule/today?user_id={user_id}")
+                        scheds = r.json().get("schedules",[])
+                        if scheds:
+                            reply += "\n\n"
+                            for s in scheds:
+                                reply += f"📌 {s['time']} {s['title']} @{s.get('location','?')}\n"
+                        else:
+                            reply += "\n\n今天没有日程安排。"
+
+                    elif fn.name == "search_memory":
+                        r = requests.get(f"http://localhost:8000/api/memory/search?user_id={user_id}&keyword={args.get('keyword','')}")
+                        mems = r.json().get("memories",[])[:5]
+                        if mems:
+                            reply += "\n\n"
+                            for m in mems:
+                                reply += f"🧠 {m['key']}: {m['value']}\n"
+                except Exception as tool_err:
+                    reply += f"\n[工具调用异常: {str(tool_err)[:50]}]"
 
         return {"reply": reply or "收到，让我想想...", "user_id": user_id}
 
