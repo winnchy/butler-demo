@@ -615,13 +615,19 @@ def root():
 
 @app.get("/health")
 def health():
-    import os
+    import os, requests as req
     key = os.environ.get("OPENAI_API_KEY", "")
+    # 测试 OpenClaw Gateway 是否可达
+    oc_status = "down"
+    try:
+        r = req.get("http://localhost:18789/health", timeout=5)
+        oc_status = f"ok({r.status_code})"
+    except: pass
     return {
         "status": "ok",
         "ws_active": world_state._running if world_state else False,
         "api_key_set": bool(key),
-        "api_key_preview": (key[:8] + "..." + key[-4:]) if key else "NOT SET",
+        "openclaw_gateway": oc_status,
     }
 
 @app.get("/debug/env")
