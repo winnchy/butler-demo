@@ -11,12 +11,11 @@ sleep 3
 
 echo ">>> Configuring OpenClaw..."
 mkdir -p ~/.openclaw
-rm -f ~/.openclaw/openclaw.json
-openclaw doctor --fix 2>/dev/null || true
+openclaw config set gateway.mode local 2>/dev/null || true
+openclaw config set workspace /app/butler 2>/dev/null || true
 
 echo ">>> Starting OpenClaw Gateway on :18789..."
-openclaw config set workspace /app/butler 2>/dev/null || true
-openclaw gateway --port 18789 --bind 0.0.0.0 --allow-unconfigured --password butler-demo-2026 &
+openclaw gateway --port 18789 --allow-unconfigured --password butler-demo-2026 &
 sleep 3
 
 echo ">>> All services started!"

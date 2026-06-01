@@ -561,16 +561,46 @@ async def _fallback_chat(msg: str, user_id: str) -> dict:
 
 @app.post("/openclaw/chat")
 async def openclaw_chat(request: dict):
-    """转发到 OpenClaw Gateway"""
-    import requests as req
+    """转发到 OpenClaw Gateway——先切换用户，再对话"""
+    import requests as req, subprocess, os
+    user_id = request.get("user_id", "white_collar")
+
+    # 1. 切换用户：把 profiles 下对应文件复制到 USER.md / MEMORY.md
+    profile_map = {
+        "white_collar": ("users/whitecollar.md", "memories/whitecollar-memory.md"),
+        "parent": ("users/parent.md", "memories/parent-memory.md"),
+        "student": ("users/student.md", "memories/student-memory.md"),
+    }
+    if user_id in profile_map:
+        u, m = profile_map[user_id]
+        try:
+            src_u = f"/app/butler/profiles/{u}"
+            src_m = f"/app/butler/profiles/{m}"
+            if os.path.exists(src_u):
+                with open(src_u, "r", encoding="utf-8") as f:
+                    content = f.read()
+                with open("/app/butler/USER.md", "w", encoding="utf-8") as f:
+                    f.write(content)
+            if os.path.exists(src_m):
+                with open(src_m, "r", encoding="utf-8") as f:
+                    content = f.read()
+                with open("/app/butler/MEMORY.md", "w", encoding="utf-8") as f:
+                    f.write(content)
+        except: pass
+
+    # 2. 转发到 OpenClaw Gateway
     try:
         resp = req.post(
             "http://localhost:18789/api/chat",
-            json={"message": request.get("message",""), "user_id": request.get("user_id","")},
-            timeout=30
+            json={"message": request.get("message","")},
+            timeout=25
         )
-        return resp.json()
+        data = resp.json()
+        # OpenClaw 返回格式可能不同，统一提取文本
+        reply = data.get("reply") or data.get("response") or data.get("text") or str(data)
+        return {"reply": reply, "user_id": user_id}
     except:
+        # 降级到自定义 AI
         return await chat_endpoint(request)
 
 
