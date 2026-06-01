@@ -17,8 +17,8 @@ COPY butler/ butler/
 # 生成模拟数据
 RUN cd mock_backend && python enrich_pois.py && python route_generator.py
 
-# 装 OpenClaw（中国用户可用 openclaw-cn 镜像更快）
-RUN npm install -g openclaw@2026.4.15
+# 装 OpenClaw
+RUN npm install -g openclaw@latest
 
 EXPOSE 8000 18789
 COPY start.sh .
