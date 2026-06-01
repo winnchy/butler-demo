@@ -228,7 +228,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <div class="toast" id="toast"></div>
 
 <script>
-const DEPLOY_MODE = 'openclaw';  // 'standalone'=本地开发(意图匹配)  'openclaw'=生产模式(AI对话)
+const DEPLOY_MODE = 'standalone';  // 'standalone'=直连后端AI  'openclaw'=通过OpenClaw
 const OPENCLAW_CHAT_URL = '/openclaw/chat';  // 后端转发到 OpenClaw
 let currentUser = 'white_collar';
 let isListening = false;
@@ -274,11 +274,15 @@ async function send() {
   const chatUrl = DEPLOY_MODE === 'openclaw' ? OPENCLAW_CHAT_URL : '/chat';
 
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
     const r = await fetch(chatUrl, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({message: msg, user_id: currentUser})
+      body: JSON.stringify({message: msg, user_id: currentUser}),
+      signal: controller.signal
     });
+    clearTimeout(timeout);
     const d = await r.json();
     clearInterval(timer);
     document.getElementById('temp-msg')?.remove();
@@ -391,31 +395,12 @@ async def chat_endpoint(request: dict):
         except: pass
 
         # 构建 system prompt
-        system_prompt = f"""你是小琴/小冉/小晴的私人管家，一位7x24小时全天候AI助理。
+        system_prompt = f"""你是私人管家。温暖简洁。
 {scenario_info}
-
-## 你的性格
-温暖但不肉麻，细心但不啰嗦，高效但不冰冷。你预判用户需求，不等用户开口。
-
-## 当前用户画像
-{user_profile[:2000]}
-
-## 当前用户记忆
-{user_memory[:2000]}
-
-## 你可以调用的工具
-1. recommend_restaurant(cuisine, budget, user_id) - 推荐餐厅，返回菜系、评分、人均、排队状态
-2. get_weather() - 获取北京当前天气，返回温度、AQI、预警
-3. get_outfit(user_id) - 获取穿搭建议
-4. plan_route(from_lat, from_lon, to_lat, to_lon, user_type) - 多模式路径规划
-5. get_events(city, type) - 获取周末活动
-6. get_schedule(user_id) - 查询今日日程
-
-## 回复规范
-- 用自然中文回复，保持简洁温暖
-- 如果需要调工具，先说明你在做什么
-- 餐厅推荐用卡片格式展示
-- 如果用户切换了身份，根据画像调整语气和推荐"""
+## 用户
+{user_profile[:1000]}
+## 可用工具
+recommend_restaurant / get_weather / get_outfit / plan_route / get_events / get_schedule"""
 
         # 调用 DeepSeek API
         api_key = os.environ.get("OPENAI_API_KEY", "")
