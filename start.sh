@@ -16,7 +16,7 @@ openclaw doctor --fix 2>/dev/null || true
 
 echo ">>> Starting OpenClaw Gateway on :18789..."
 openclaw config set workspace /app/butler 2>/dev/null || true
-openclaw gateway --port 18789 --allow-unconfigured --password butler-demo-2026 --verbose &
+openclaw gateway --port 18789 --bind 0.0.0.0 --allow-unconfigured --password butler-demo-2026 &
 sleep 3
 
 echo ">>> All services started!"

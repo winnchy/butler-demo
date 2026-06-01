@@ -228,7 +228,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <div class="toast" id="toast"></div>
 
 <script>
-const DEPLOY_MODE = 'standalone';  // 'standalone'=直连后端AI  'openclaw'=通过OpenClaw
+const DEPLOY_MODE = 'openclaw';  // 'openclaw'=通过OpenClaw Gateway  'standalone'=直连后端AI
 const OPENCLAW_CHAT_URL = '/openclaw/chat';  // 后端转发到 OpenClaw
 let currentUser = 'white_collar';
 let isListening = false;
