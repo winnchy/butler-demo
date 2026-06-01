@@ -15,7 +15,8 @@ rm -f ~/.openclaw/openclaw.json
 openclaw doctor --fix 2>/dev/null || true
 
 echo ">>> Starting OpenClaw Gateway on :18789..."
-openclaw gateway --port 18789 --workspace /app/butler --allow-unconfigured --password butler-demo-2026 --verbose &
+openclaw config set workspace /app/butler 2>/dev/null || true
+openclaw gateway --port 18789 --allow-unconfigured --password butler-demo-2026 --verbose &
 sleep 3
 
 echo ">>> All services started!"

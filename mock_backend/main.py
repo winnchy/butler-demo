@@ -275,7 +275,7 @@ async function send() {
 
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000);
+    const timeout = setTimeout(() => controller.abort(), 45000);
     const r = await fetch(chatUrl, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
@@ -365,33 +365,23 @@ async def chat_endpoint(request: dict):
         return {"reply": "我在听～请说。"}
 
     try:
-        # 读 SOUL.md（管家性格和行为指南）
-        soul_prompt = "你是私人管家。"
+        # 读 SOUL.md（管家性格和行为指南）— 只取前 2000 字符提效
+        soul_prompt = "你是全天候私人管家。"
         try:
             with open("/app/butler/SOUL.md", "r", encoding="utf-8") as f:
-                soul_prompt = f.read()[:4000]
+                soul_prompt = f.read()
         except: pass
 
-        # 读当前用户资料
+        # 读当前用户资料 — 只取系统可读字段
         user_context = ""
         try:
             with open("/app/butler/USER.md", "r", encoding="utf-8") as f:
-                user_context += f.read()[:2000] + "\n"
+                user_context += f.read()[:1200] + "\n"
         except: pass
         try:
             with open("/app/butler/MEMORY.md", "r", encoding="utf-8") as f:
-                user_context += f.read()[:2000]
+                user_context += f.read()[:1200]
         except: pass
-
-        # 读技能列表
-        skills_intro = "\n## 可用技能（调用对应 API）\n"
-        for skill in ["dining-butler","mobility-butler","city-explorer","outfit-advisor","life-organizer"]:
-            try:
-                p = f"/app/butler/skills/{skill}/SKILL.md"
-                with open(p, "r", encoding="utf-8") as f:
-                    first_lines = "".join(f.readlines()[:30])
-                skills_intro += f"\n### {skill}\n{first_lines[:600]}\n"
-            except: pass
 
         # 附加实时天气
         try:
@@ -400,7 +390,7 @@ async def chat_endpoint(request: dict):
             user_context += f"\n北京当前{w.get('condition','?')} {w.get('current_temp','?')}°C AQI{w.get('aqi','?')}"
         except: pass
 
-        system_prompt = soul_prompt + "\n\n## 当前服务用户\n" + user_context + skills_intro
+        system_prompt = soul_prompt + "\n\n## 当前服务用户\n" + user_context
 
         # 调用 DeepSeek API
         api_key = os.environ.get("OPENAI_API_KEY", "")
@@ -443,7 +433,7 @@ async def chat_endpoint(request: dict):
             ],
             tools=tools,
             temperature=0.7,
-            max_tokens=800,
+            max_tokens=500,
             timeout=25
         )
 
