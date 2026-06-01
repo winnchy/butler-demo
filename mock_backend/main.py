@@ -614,17 +614,22 @@ def root():
 def health():
     import os, requests as req
     key = os.environ.get("OPENAI_API_KEY", "")
-    # 测试 OpenClaw Gateway 是否可达
-    oc_status = "down"
+    # 测试 OpenClaw Gateway 各端点
+    oc = {"health": "down", "chat": "down"}
     try:
-        r = req.get("http://localhost:18789/health", timeout=5)
-        oc_status = f"ok({r.status_code})"
+        r = req.get("http://localhost:18789/health", timeout=3)
+        oc["health"] = f"ok({r.status_code})"
     except: pass
+    try:
+        r = req.post("http://localhost:18789/api/chat", json={"message":"ping"}, timeout=5)
+        oc["chat"] = f"ok({r.status_code}): {str(r.text)[:80]}"
+    except Exception as e:
+        oc["chat"] = str(e)[:60]
     return {
         "status": "ok",
         "ws_active": world_state._running if world_state else False,
         "api_key_set": bool(key),
-        "openclaw_gateway": oc_status,
+        "openclaw": oc,
     }
 
 @app.get("/debug/env")
