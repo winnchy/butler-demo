@@ -260,7 +260,16 @@ async function send() {
   if (!msg) return;
   input.value = '';
   addMessage('user', msg);
-  addMessage('bot', '<em>思考中...</em>', true);
+
+  // 思考计时器
+  let thinkSec = 0;
+  const thinkId = 'think-' + Date.now();
+  addMessage('bot', '<div class="typing"><span></span><span></span><span></span></div> 思考中 (<span id="' + thinkId + '">0</span>秒)...', true);
+  const timer = setInterval(() => {
+    thinkSec++;
+    const el = document.getElementById(thinkId);
+    if (el) el.textContent = thinkSec;
+  }, 1000);
 
   const chatUrl = DEPLOY_MODE === 'openclaw' ? OPENCLAW_CHAT_URL : '/chat';
 
@@ -271,9 +280,11 @@ async function send() {
       body: JSON.stringify({message: msg, user_id: currentUser})
     });
     const d = await r.json();
+    clearInterval(timer);
     document.getElementById('temp-msg')?.remove();
     addMessage('bot', d.reply || d.response || '抱歉，出了点问题...');
   } catch(e) {
+    clearInterval(timer);
     document.getElementById('temp-msg')?.remove();
     addMessage('bot', '服务暂时不可用，请确认后端已启动');
   }
@@ -370,16 +381,13 @@ async def chat_endpoint(request: dict):
                     skills_summary += f.read()[:800] + "\n"
             except: pass
 
-        # 获取当前场景状态
+        # 获取当前天气
         scenario_info = ""
         try:
-            import main as m
-            if m.world_state and m.world_state.scenario_override:
-                scenario_info = "\n## ⚠️ 当前激活场景\n" + str(m.world_state.scenario_override.get("description","")) + "\n请根据此场景调整你的回复。"
-            # 天气信息
-            w = m.world_state.get_weather() if m.world_state else {}
+            import requests
+            w = requests.get("http://localhost:8000/api/weather/current", timeout=3).json()
             if w:
-                scenario_info += f"\n## 当前真实天气\n北京{w.get('condition','')}，{w.get('current_temp','')}°C，AQI{w.get('aqi','')}，预警：{w.get('alerts',[])}"
+                scenario_info = f"\n## 当前真实天气\n北京{w.get('condition','?')}，{w.get('current_temp','?')}°C，AQI{w.get('aqi','?')}，预警：{w.get('alerts',[])}"
         except: pass
 
         # 构建 system prompt
@@ -438,7 +446,8 @@ async def chat_endpoint(request: dict):
             ],
             tools=tools,
             temperature=0.7,
-            max_tokens=1000
+            max_tokens=800,
+            timeout=25
         )
 
         # 处理 LLM 响应和工具调用
@@ -503,7 +512,7 @@ async def chat_endpoint(request: dict):
         return {"reply": reply or "收到，让我想想...", "user_id": user_id}
 
     except Exception as e:
-        return await _fallback_chat(msg, user_id)
+        return {"reply": f"抱歉，AI 服务暂时异常：{str(e)[:200]}", "user_id": user_id}
 
 
 async def _fallback_chat(msg: str, user_id: str) -> dict:
