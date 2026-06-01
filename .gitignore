@@ -17,11 +17,3 @@ mock_backend/data/world_state_snapshot.json
 butler/USER.md
 butler/MEMORY.md
 butler/wardrobe.md
-
-# 美团官方 Skill（不集成，保留在本地但不提交）
-meituan-travel/
-meituan-venue-guide/
-meituan-fenxiao-promotion-coupon/
-butler/skills/meituan-travel/
-butler/skills/meituan-venue-guide/
-butler/skills/meituan-fenxiao-promotion-coupon/
