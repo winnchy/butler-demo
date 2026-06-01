@@ -30,7 +30,7 @@ cat > ~/.openclaw/openclaw.json << 'EOF'
 EOF
 
 echo ">>> Starting OpenClaw Gateway on :18789..."
-openclaw gateway --port 18789 --allow-unconfigured --verbose &
+openclaw gateway --port 18789 --allow-unconfigured --password butler-demo-2026 --verbose &
 sleep 3
 
 echo ">>> All services started!"
