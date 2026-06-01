@@ -12,25 +12,12 @@ export OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://api.deepseek.com/v1}"
 # 创建 OpenClaw 配置目录
 mkdir -p ~/.openclaw
 
-# 写入 OpenClaw 配置
-cat > ~/.openclaw/openclaw.json << 'EOF'
-{
-  "workspace": "/app/butler",
-  "gateway": {
-    "mode": "local",
-    "port": 18789,
-    "host": "0.0.0.0"
-  },
-  "models": {
-    "default": "deepseek-chat",
-    "provider": "openai",
-    "baseURL": "https://api.deepseek.com/v1"
-  }
-}
-EOF
+# 用 openclaw doctor 自动生成有效配置（不手写，避免格式错误）
+rm -f ~/.openclaw/openclaw.json
+openclaw doctor --fix 2>/dev/null || true
 
 echo ">>> Starting OpenClaw Gateway on :18789..."
-openclaw gateway --port 18789 --allow-unconfigured --password butler-demo-2026 --verbose &
+openclaw gateway --port 18789 --workspace /app/butler --allow-unconfigured --password butler-demo-2026 --verbose &
 sleep 3
 
 echo ">>> All services started!"
