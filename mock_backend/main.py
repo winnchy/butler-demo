@@ -289,14 +289,15 @@ function addMessage(role, text, isTemp) {
   document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
 }
 
-function switchUser(uid) {
+async function switchUser(uid) {
   currentUser = uid;
+  // 通知后端切换用户资料文件
+  try { await fetch('/admin/switch-user/' + uid, {method:'POST'}); } catch(e) {}
   const greetings = {
-    white_collar: '你好小琴！今天北京晴28°C，早高峰东三环有点堵。中午想吃什么？',
+    white_collar: '你好小琴！今天北京晴28°C。中午想吃什么？',
     parent: '早啊小冉！乐乐今天状态不错～布丁早上遛过了。需要帮你安排什么？',
     student: '嗨小晴！今天中关村阴转多云22°C。需要帮什么忙？'
   };
-  document.getElementById('userSelect').value = uid;
   addMessage('bot', greetings[uid] || '已切换用户～有什么可以帮你的？');
 }
 
@@ -332,130 +333,175 @@ def chat_ui():
 
 @app.post("/chat")
 async def chat_endpoint(request: dict):
-    """聊天接口：简单意图匹配 + API调用 + 卡片回复"""
+    """AI 对话：DeepSeek + 工具调用（等价于 OpenClaw 核心能力）"""
     msg = request.get("message", "").strip()
     user_id = request.get("user_id", "white_collar")
 
     if not msg:
         return {"reply": "我在听～请说。"}
 
-    # 简单意图匹配
-    reply = ""
-    msg_lower = msg.lower()
-
     try:
-        # 吃饭/餐厅
-        if any(w in msg for w in ["吃", "饭", "餐厅", "火锅", "日料", "粤菜", "川菜", "饿", "午餐", "晚餐", "午饭", "晚饭"]):
-            cuisine = None
-            for c in ["火锅", "日料", "粤菜", "川菜", "烧烤", "西餐", "海鲜", "东南亚"]:
-                if c in msg: cuisine = c; break
-            import requests
-            r = requests.post("http://localhost:8000/api/dining/recommend", json={
-                "user_id": user_id, "cuisine": cuisine, "latitude": 39.925, "longitude": 116.59
-            })
-            recs = r.json().get("recommendations", [])[:3]
-            if recs:
-                reply = f"帮你找了{'「'+cuisine+'」' if cuisine else '几家不错的'}，看看想吃哪个？\n\n"
-                for rec in recs:
-                    status_icon = {"有位":"🟢","等位":"🟡","排队":"🟠","长队":"🔴"}.get(rec.get("status",""),"")
-                    reply += f"<div class='card restaurant'><div class='card-title'>{rec['name']}</div>"
-                    reply += f"<div class='card-row'><span class='card-tag'>{rec['cuisine']}</span>"
-                    reply += f"<span class='card-tag blue'>{rec['rating']}分</span>"
-                    reply += f"<span class='card-tag green'>¥{rec['avg_price']}/人</span>"
-                    reply += f"<span>{status_icon} {rec['status']} ({rec['current_queue']}桌)</span></div>"
-                    reply += f"<div class='card-row'>距离{rec['distance_km']}km · {', '.join(rec.get('match_reasons',[])[:2])}</div></div>"
-            else:
-                reply = "暂时没找到匹配的餐厅，要不要换个菜系试试？"
+        # 读取当前用户画像和记忆
+        user_profile = ""
+        user_memory = ""
+        try:
+            with open("/app/butler/USER.md", "r", encoding="utf-8") as f:
+                user_profile = f.read()[:3000]
+        except: pass
+        try:
+            with open("/app/butler/MEMORY.md", "r", encoding="utf-8") as f:
+                user_memory = f.read()[:3000]
+        except: pass
 
-        # 天气/穿搭
-        elif any(w in msg for w in ["天气", "穿", "冷", "热", "下雨", "晴", "温度", "带伞"]):
-            import requests
-            w = requests.get("http://localhost:8000/api/weather/current").json()
-            o = requests.get(f"http://localhost:8000/api/outfit/suggest?user_id={user_id}").json()
-            reply = f"<div class='card weather'><div class='card-title'>🌤 北京当前天气</div>"
-            reply += f"<div class='card-row'><span>{w.get('condition','?')} · {w.get('temperature','?')}°C</span>"
-            reply += f"<span>体感 {w.get('feels_like','?')}°C</span><span>AQI {w.get('aqi','?')} ({w.get('aqi_level','?')})</span></div>"
-            if w.get('alerts'):
-                for a in w['alerts']:
-                    reply += f"<div class='card-row'><span class='card-tag red'>⚠ {a.get('type','')}</span></div>"
-            reply += f"</div>"
-            reply += f"<div style='margin-top:8px'><b>今日穿搭建议：</b>{o.get('base_suggestion','')}<br>"
-            reply += f"推荐单品：{', '.join(o.get('recommended_items',[]))}<br>"
-            reply += f"💡 {o.get('tip','')}</div>"
+        # 读取部分技能定义作为工具说明
+        skills_summary = ""
+        for skill in ["dining-butler","mobility-butler","city-explorer","outfit-advisor","life-organizer"]:
+            try:
+                with open(f"/app/butler/skills/{skill}/SKILL.md","r",encoding="utf-8") as f:
+                    skills_summary += f.read()[:800] + "\n"
+            except: pass
 
-        # 出行/路线
-        elif any(w in msg for w in ["去", "走", "怎么", "路线", "地铁", "开车", "打车", "骑车", "多远"]):
-            import requests
-            r = requests.post("http://localhost:8000/api/mobility/route", json={
-                "origin_lat": 39.925, "origin_lon": 116.59,
-                "dest_lat": 39.91, "dest_lon": 116.46,
-                "user_type": user_id
-            })
-            opts = r.json().get("options", [])
-            if opts:
-                reply = f"帮你规划了路线，{r.json().get('recommend_reason','')}：\n\n"
-                for o in opts[:3]:
-                    icon = {"driving":"🚗","transit":"🚇","cycling":"🚲","walking":"🚶","taxi":"🚕"}.get(o["mode"],"")
-                    reply += f"<div class='card route'><div class='card-title'>{icon} {o['mode']} · {o['time_min']}分钟</div>"
-                    reply += f"<div class='card-row'><span>距离 {o.get('distance_km','?')}km</span><span>约 ¥{o.get('cost_yuan',0)}</span></div></div>"
-            else:
-                reply = "暂时无法规划路线，请检查起终点。"
+        # 构建 system prompt
+        system_prompt = f"""你是小琴/小冉/小晴的私人管家，一位7x24小时全天候AI助理。
 
-        # 活动/周末
-        elif any(w in msg for w in ["活动", "周末", "展览", "市集", "玩", "逛", "演出", "亲子"]):
-            import requests
-            etype = "kids" if ("亲子" in msg or "带娃" in msg or "孩子" in msg) else "all"
-            r = requests.get(f"http://localhost:8000/api/city/events?type={etype}&user_id={user_id}")
-            events = r.json().get("events", [])[:3]
-            if events:
-                reply = f"这周末的活动来啦～{r.json().get('weather_tip','')}\n\n"
-                for e in events:
-                    reply += f"<div class='card event'><div class='card-title'>🎯 {e['name']}</div>"
-                    reply += f"<div class='card-row'><span class='card-tag'>{e['type']}</span>"
-                    price = e.get('price',{})
-                    ptext = f"¥{price.get('regular',0)}" + (f"/学生¥{price.get('student')}" if price.get('student') else "")
-                    reply += f"<span>{ptext}</span><span>{e['distance_km']}km</span></div>"
-                    reply += f"<div class='card-row'>📍 {e['location']} · {e.get('date','')}</div></div>"
-            else:
-                reply = "暂时没找到合适的活动，换个关键词试试？"
+## 你的性格
+温暖但不肉麻，细心但不啰嗦，高效但不冰冷。你预判用户需求，不等用户开口。
 
-        # 日程/提醒
-        elif any(w in msg for w in ["日程", "提醒", "安排", "今天有什么", "明天有什么", "记一下"]):
-            import requests
-            r = requests.get(f"http://localhost:8000/api/schedule/today?user_id={user_id}")
-            scheds = r.json().get("schedules", [])
-            if scheds:
-                reply = f"今天的安排：\n"
-                for s in scheds:
-                    reply += f"📌 {s['time']} {s['title']}" + (f" @ {s.get('location','')}" if s.get('location') else "") + "\n"
-            else:
-                reply = "今天没有日程安排。需要我帮你记什么吗？"
+## 当前用户画像
+{user_profile[:2000]}
 
-        else:
-            reply = f"收到！作为你的私人管家，我可以帮你：\n\n🍽️ <b>找餐厅</b>——试试说「附近火锅」「人均100的粤菜」\n👔 <b>穿搭建议</b>——试试说「今天穿什么」「明天冷不冷」\n🚇 <b>出行规划</b>——试试说「去国贸怎么走」\n🎯 <b>周末活动</b>——试试说「周末有什么展览」\n📅 <b>日程管理</b>——试试说「今天有什么安排」"
+## 当前用户记忆
+{user_memory[:2000]}
+
+## 你可以调用的工具
+1. recommend_restaurant(cuisine, budget, user_id) - 推荐餐厅，返回菜系、评分、人均、排队状态
+2. get_weather() - 获取北京当前天气，返回温度、AQI、预警
+3. get_outfit(user_id) - 获取穿搭建议
+4. plan_route(from_lat, from_lon, to_lat, to_lon, user_type) - 多模式路径规划
+5. get_events(city, type) - 获取周末活动
+6. get_schedule(user_id) - 查询今日日程
+
+## 回复规范
+- 用自然中文回复，保持简洁温暖
+- 如果需要调工具，先说明你在做什么
+- 餐厅推荐用卡片格式展示
+- 如果用户切换了身份，根据画像调整语气和推荐"""
+
+        # 调用 DeepSeek API
+        api_key = os.environ.get("OPENAI_API_KEY", "")
+        if not api_key:
+            return await _fallback_chat(msg, user_id)
+
+        from openai import OpenAI
+        client = OpenAI(
+            api_key=api_key,
+            base_url="https://api.deepseek.com/v1"
+        )
+
+        # 定义工具
+        tools = [
+            {"type":"function","function":{"name":"recommend_restaurant","description":"推荐餐厅","parameters":{"type":"object","properties":{"cuisine":{"type":"string","description":"菜系"},"budget":{"type":"integer","description":"人均预算"},"user_id":{"type":"string"}},"required":["user_id"]}}},
+            {"type":"function","function":{"name":"get_weather","description":"获取北京当前天气","parameters":{"type":"object","properties":{}}}},
+            {"type":"function","function":{"name":"get_outfit","description":"获取穿搭建议","parameters":{"type":"object","properties":{"user_id":{"type":"string"}},"required":["user_id"]}}},
+            {"type":"function","function":{"name":"plan_route","description":"路径规划","parameters":{"type":"object","properties":{"origin":{"type":"string"},"destination":{"type":"string"},"user_type":{"type":"string"}},"required":["origin","destination"]}}},
+            {"type":"function","function":{"name":"get_events","description":"获取周末活动","parameters":{"type":"object","properties":{"type":{"type":"string","description":"kids/market/exhibition/all"}},"required":[]}}},
+            {"type":"function","function":{"name":"get_schedule","description":"查询今日日程","parameters":{"type":"object","properties":{"user_id":{"type":"string"}},"required":["user_id"]}}},
+        ]
+
+        response = client.chat.completions.create(
+            model="deepseek-chat",
+            messages=[
+                {"role":"system","content":system_prompt},
+                {"role":"user","content":msg}
+            ],
+            tools=tools,
+            temperature=0.7,
+            max_tokens=1000
+        )
+
+        # 处理 LLM 响应和工具调用
+        choice = response.choices[0]
+        reply = choice.message.content or ""
+
+        # 如果 LLM 要调工具，执行并拼接结果
+        if choice.message.tool_calls:
+            import requests
+            for tc in choice.message.tool_calls:
+                fn = tc.function
+                try:
+                    args = json_mod.loads(fn.arguments)
+                except:
+                    args = {}
+
+                if fn.name == "recommend_restaurant":
+                    r = requests.post("http://localhost:8000/api/dining/recommend",json={"user_id":user_id,"cuisine":args.get("cuisine"),"budget_per_person":args.get("budget"),"latitude":39.925,"longitude":116.59})
+                    recs = r.json().get("recommendations",[])[:3]
+                    if recs:
+                        reply += "\n\n"
+                        for rec in recs:
+                            reply += f"🍽️ **{rec['name']}** | {rec['cuisine']} | ⭐{rec['rating']} | ¥{rec['avg_price']}/人 | {rec.get('status','')}\n"
+
+                elif fn.name == "get_weather":
+                    r = requests.get("http://localhost:8000/api/weather/current")
+                    w = r.json()
+                    reply += f"\n\n🌤 北京 {w.get('condition','')} {w.get('temperature','')}°C | AQI {w.get('aqi','')}({w.get('aqi_level','')})"
+
+                elif fn.name == "get_outfit":
+                    r = requests.get(f"http://localhost:8000/api/outfit/suggest?user_id={user_id}")
+                    o = r.json()
+                    reply += f"\n\n👔 {o.get('base_suggestion','')}：{', '.join(o.get('recommended_items',[])[:5])}"
+
+                elif fn.name == "plan_route":
+                    # 使用默认起终点
+                    r = requests.post("http://localhost:8000/api/mobility/route",json={"origin_lat":39.925,"origin_lon":116.59,"dest_lat":39.91,"dest_lon":116.46,"user_type":user_id})
+                    opts = r.json().get("options",[])[:2]
+                    if opts:
+                        reply += "\n\n"
+                        for o in opts:
+                            reply += f"🚗 {o['mode']} {o['time_min']}分钟 | ¥{o.get('cost_yuan',0)}\n"
+
+                elif fn.name == "get_events":
+                    r = requests.get(f"http://localhost:8000/api/city/events?type={args.get('type','all')}&user_id={user_id}")
+                    events = r.json().get("events",[])[:3]
+                    if events:
+                        reply += "\n\n"
+                        for e in events:
+                            reply += f"🎯 {e['name']} | {e['location']} | {e.get('date','')}\n"
+
+                elif fn.name == "get_schedule":
+                    r = requests.get(f"http://localhost:8000/api/schedule/today?user_id={user_id}")
+                    scheds = r.json().get("schedules",[])
+                    if scheds:
+                        reply += "\n\n"
+                        for s in scheds:
+                            reply += f"📌 {s['time']} {s['title']}\n"
+                    else:
+                        reply += "\n\n今天没有日程安排。"
+
+        return {"reply": reply or "收到，让我想想...", "user_id": user_id}
 
     except Exception as e:
-        reply = f"抱歉，查询时出了点问题：{str(e)[:100]}。请确认后端已启动。"
+        return await _fallback_chat(msg, user_id)
 
+
+async def _fallback_chat(msg: str, user_id: str) -> dict:
+    """当 AI 不可用时的降级回复"""
+    reply = f"收到你的消息了～当前 AI 服务暂未配置（需要设置 OPENAI_API_KEY 环境变量）。\n\n你可以试试：\n🍽️ 「附近火锅」\n👔 「今天穿什么」\n🚇 「去国贸怎么走」\n🎯 「周末有什么活动」"
     return {"reply": reply, "user_id": user_id}
 
 
 @app.post("/openclaw/chat")
 async def openclaw_chat(request: dict):
-    """生产模式：转发聊天请求到 OpenClaw 容器"""
+    """转发到 OpenClaw Gateway"""
     import requests as req
     try:
         resp = req.post(
-            "http://openclaw:3000/api/chat",
-            json={
-                "message": request.get("message", ""),
-                "user_id": request.get("user_id", "white_collar"),
-            },
+            "http://localhost:18789/api/chat",
+            json={"message": request.get("message",""), "user_id": request.get("user_id","")},
             timeout=30
         )
         return resp.json()
-    except Exception as e:
-        # OpenClaw 不可用时降级到本地意图匹配
+    except:
         return await chat_endpoint(request)
 
 

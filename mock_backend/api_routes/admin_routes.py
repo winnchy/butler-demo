@@ -9,7 +9,10 @@ import main
 router = APIRouter()
 
 # ---- 路径配置 ----
-BUTLER_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "butler"))
+BUTLER_DIR = os.environ.get("BUTLER_DIR", os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "butler")))
+# Railway/Docker 环境使用 /app/butler
+if os.path.exists("/app/butler"):
+    BUTLER_DIR = "/app/butler"
 PROFILES_DIR = os.path.join(BUTLER_DIR, "profiles")
 
 USER_SWITCH_MAP = {
