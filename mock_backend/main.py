@@ -154,6 +154,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   .sidebar{display:none}
   .main{max-width:100%}
 }
+/* Sidebar toggle */
+.sidebar{display:none}.sidebar.open{display:flex;position:fixed;top:0;left:0;height:100%;z-index:100;overflow-y:auto}
+.hamburger{background:none;border:none;color:#888;font-size:18px;cursor:pointer;padding:4px 8px}
+.user-switch{display:flex;gap:6px;align-items:center}
+.user-switch select{padding:5px 8px;border:1px solid #333;border-radius:6px;background:#1a1a1a;color:#ccc;font-size:12px;cursor:pointer;outline:none}
+.user-switch select:focus{border-color:#2563eb}
 /* Typing dots */
 .typing{display:flex;gap:4px;padding:4px 0}
 .typing span{width:6px;height:6px;border-radius:50%;background:#666;animation:typing 1.4s infinite}
@@ -165,7 +171,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <body>
 <div class="app-container">
 
-<div class="sidebar">
+<div class="sidebar" id="sidebar-el">
   <h2>🛎️ Butler</h2>
   <div class="desc">全天候私人管家 · 管理面板</div>
   <div class="divider"></div>
@@ -190,8 +196,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 <div class="main">
   <div class="header">
+    <button class="hamburger" onclick="document.getElementById('sidebar-el').classList.toggle('open')" title="管理面板">☰</button>
     <div class="avatar">🛎️</div>
-    <div><div class="title">全天候私人管家</div><div class="subtitle" id="header-user">当前服务: 小琴 (白领)</div></div>
+    <div style="flex:1"><div class="title">全天候私人管家</div></div>
+    <div class="user-switch">
+      <select id="userSelect" onchange="switchUser(this.value)">
+        <option value="white_collar">🏢 小琴</option>
+        <option value="parent">👶 小冉</option>
+        <option value="student">🎓 小晴</option>
+      </select>
+    </div>
   </div>
   <div class="messages" id="messages">
     <div class="msg bot">
@@ -214,7 +228,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <div class="toast" id="toast"></div>
 
 <script>
-const DEPLOY_MODE = 'standalone';  // 'standalone'=本地开发(意图匹配)  'openclaw'=生产模式(AI对话)
+const DEPLOY_MODE = 'openclaw';  // 'standalone'=本地开发(意图匹配)  'openclaw'=生产模式(AI对话)
 const OPENCLAW_CHAT_URL = '/openclaw/chat';  // 后端转发到 OpenClaw
 let currentUser = 'white_collar';
 let isListening = false;
@@ -275,18 +289,14 @@ function addMessage(role, text, isTemp) {
   document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
 }
 
-async function switchUser(uid) {
+function switchUser(uid) {
   currentUser = uid;
-  const names = {white_collar:'小琴 (白领)',parent:'小冉 (宝妈)',student:'小晴 (大学生)'};
   const greetings = {
-    white_collar: '早上好小琴！今天北京晴28°C，早高峰东三环有点堵。果果绘画班10:00。中午想吃什么？',
-    parent: '早啊小冉！乐乐今天状态不错～布丁早上遛过了。阿彬今晚又要加班，要不要提前帮你安排晚餐？',
-    student: '嗨小晴！今天中关村阴转多云22°C。昨晚睡得好吗？奶茶配额还剩5杯哦～'
+    white_collar: '你好小琴！今天北京晴28°C，早高峰东三环有点堵。中午想吃什么？',
+    parent: '早啊小冉！乐乐今天状态不错～布丁早上遛过了。需要帮你安排什么？',
+    student: '嗨小晴！今天中关村阴转多云22°C。需要帮什么忙？'
   };
-  document.getElementById('header-user').textContent = '当前服务: ' + names[uid];
-  document.querySelectorAll('.user-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('btn-' + (uid==='white_collar'?'wc':uid==='parent'?'parent':'student')).classList.add('active');
-  try { await fetch('/admin/switch-user/' + uid, {method:'POST'}); } catch(e) {}
+  document.getElementById('userSelect').value = uid;
   addMessage('bot', greetings[uid] || '已切换用户～有什么可以帮你的？');
 }
 
