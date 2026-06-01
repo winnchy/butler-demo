@@ -2,7 +2,7 @@ FROM python:3.12-slim
 WORKDIR /app
 
 # 装 Node.js 22（OpenClaw 需要）
-RUN apt-get update && apt-get install -y curl && \
+RUN apt-get update && apt-get install -y curl git && \
     curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     apt-get install -y nodejs && apt-get clean
 
