@@ -365,42 +365,42 @@ async def chat_endpoint(request: dict):
         return {"reply": "我在听～请说。"}
 
     try:
-        # 读取当前用户画像和记忆
-        user_profile = ""
-        user_memory = ""
+        # 读 SOUL.md（管家性格和行为指南）
+        soul_prompt = "你是私人管家。"
+        try:
+            with open("/app/butler/SOUL.md", "r", encoding="utf-8") as f:
+                soul_prompt = f.read()[:4000]
+        except: pass
+
+        # 读当前用户资料
+        user_context = ""
         try:
             with open("/app/butler/USER.md", "r", encoding="utf-8") as f:
-                user_profile = f.read()[:3000]
+                user_context += f.read()[:2000] + "\n"
         except: pass
         try:
             with open("/app/butler/MEMORY.md", "r", encoding="utf-8") as f:
-                user_memory = f.read()[:3000]
+                user_context += f.read()[:2000]
         except: pass
 
-        # 读取部分技能定义作为工具说明
-        skills_summary = ""
+        # 读技能列表
+        skills_intro = "\n## 可用技能（调用对应 API）\n"
         for skill in ["dining-butler","mobility-butler","city-explorer","outfit-advisor","life-organizer"]:
             try:
-                with open(f"/app/butler/skills/{skill}/SKILL.md","r",encoding="utf-8") as f:
-                    skills_summary += f.read()[:800] + "\n"
+                p = f"/app/butler/skills/{skill}/SKILL.md"
+                with open(p, "r", encoding="utf-8") as f:
+                    first_lines = "".join(f.readlines()[:30])
+                skills_intro += f"\n### {skill}\n{first_lines[:600]}\n"
             except: pass
 
-        # 获取当前天气
-        scenario_info = ""
+        # 附加实时天气
         try:
             import requests
             w = requests.get("http://localhost:8000/api/weather/current", timeout=3).json()
-            if w:
-                scenario_info = f"\n## 当前真实天气\n北京{w.get('condition','?')}，{w.get('current_temp','?')}°C，AQI{w.get('aqi','?')}，预警：{w.get('alerts',[])}"
+            user_context += f"\n北京当前{w.get('condition','?')} {w.get('current_temp','?')}°C AQI{w.get('aqi','?')}"
         except: pass
 
-        # 构建 system prompt
-        system_prompt = f"""你是私人管家。温暖简洁。
-{scenario_info}
-## 用户
-{user_profile[:1000]}
-## 可用工具
-recommend_restaurant / get_weather / get_outfit / plan_route / get_events / get_schedule"""
+        system_prompt = soul_prompt + "\n\n## 当前服务用户\n" + user_context + skills_intro
 
         # 调用 DeepSeek API
         api_key = os.environ.get("OPENAI_API_KEY", "")
