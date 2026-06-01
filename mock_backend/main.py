@@ -302,11 +302,20 @@ async function switchUser(uid) {
 }
 
 async function triggerScene(id) {
+  const scenes = {
+    '1':  { title: '接待上级午餐', detail: '小琴12:00接待王总+深圳合作方。已为你筛选包厢粤菜，金融街附近3家可选。' },
+    '2':  { title: '逛街突遇暴雨', detail: '⚠️ 暴雨黄色预警！蓝色港湾附近突降暴雨，预计持续到15:00。建议改室内活动，已推送同商场备选餐厅。' },
+    '7':  { title: '乐乐凌晨发烧', detail: '🚨 凌晨2:00，乐乐体温38.5°C。已推送最近儿科急诊、叫车到医院、提醒阿彬明天请假。' },
+    '9':  { title: '航班延误', detail: '⚠️ 北京→上海 CA1234 因雷暴延误2小时。已查高铁G7替代（10:00-14:30），延误险可理赔，面试酒店已推送。' },
+    '14': { title: '沙尘暴突袭', detail: '⚠️ 沙尘暴黄色预警！AQI 350+，能见度低。建议戴N95、改地铁出行、关好门窗。' },
+    '15': { title: '早高峰地铁故障', detail: '⚠️ 6号线常营段信号故障，延误约20分钟。已推替代方案：打车(12分钟等)+共享单车到黄渠站。' },
+    '18': { title: '宠物急诊', detail: '🚨 布丁疑似误食呕吐！已推送最近宠物医院（2.3km）、叫车、提醒公婆帮忙照顾乐乐。' },
+    '19': { title: '餐厅临时歇业', detail: '⚠️ 你约好的餐厅因设备维修临时歇业。已切换同商圈备选，步行3分钟可达。' }
+  };
   try {
-    const r = await fetch('/admin/trigger/scenario/' + id, {method:'POST'});
-    const d = await r.json();
-    toast('场景 ' + id + ' 已触发', 'ok');
-    addMessage('bot', '🔔 <b>场景 ' + id + ' 已激活</b><br>' + (d.description || ''));
+    await fetch('/admin/trigger/scenario/' + id, {method:'POST'});
+    const s = scenes[id] || {title:'场景'+id, detail:'已激活'};
+    addMessage('bot', '<b>🎬 ' + s.title + '</b><br>' + s.detail);
   } catch(e) { toast('触发失败', 'err'); }
 }
 
@@ -361,8 +370,21 @@ async def chat_endpoint(request: dict):
                     skills_summary += f.read()[:800] + "\n"
             except: pass
 
+        # 获取当前场景状态
+        scenario_info = ""
+        try:
+            import main as m
+            if m.world_state and m.world_state.scenario_override:
+                scenario_info = "\n## ⚠️ 当前激活场景\n" + str(m.world_state.scenario_override.get("description","")) + "\n请根据此场景调整你的回复。"
+            # 天气信息
+            w = m.world_state.get_weather() if m.world_state else {}
+            if w:
+                scenario_info += f"\n## 当前真实天气\n北京{w.get('condition','')}，{w.get('current_temp','')}°C，AQI{w.get('aqi','')}，预警：{w.get('alerts',[])}"
+        except: pass
+
         # 构建 system prompt
         system_prompt = f"""你是小琴/小冉/小晴的私人管家，一位7x24小时全天候AI助理。
+{scenario_info}
 
 ## 你的性格
 温暖但不肉麻，细心但不啰嗦，高效但不冰冷。你预判用户需求，不等用户开口。
