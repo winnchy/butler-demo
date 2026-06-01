@@ -540,6 +540,19 @@ def root():
 def health():
     return {"status": "ok", "ws_active": world_state._running if world_state else False}
 
+@app.get("/debug/env")
+def debug_env():
+    """诊断：检查环境变量是否正确加载"""
+    import os
+    key = os.environ.get("OPENAI_API_KEY", "")
+    base = os.environ.get("OPENAI_BASE_URL", "")
+    return {
+        "openai_api_key_set": bool(key),
+        "openai_api_key_preview": (key[:8] + "..." + key[-4:]) if key else "NOT SET",
+        "openai_base_url": base or "NOT SET",
+        "all_env_keys": [k for k in os.environ.keys() if "API" in k or "OPEN" in k or "KEY" in k.upper()],
+    }
+
 
 # ---- 挂载子路由 ----
 
