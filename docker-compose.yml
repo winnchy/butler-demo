@@ -1,0 +1,25 @@
+version: '3.8'
+services:
+  backend:
+    build: ./mock_backend
+    container_name: butler-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./mock_backend/data:/app/data
+    restart: unless-stopped
+
+  openclaw:
+    image: openclaw/openclaw:v2026.4.15
+    container_name: butler-openclaw
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./butler:/app/workspace
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENCLAW_WORKSPACE=/app/workspace
+      - MOCK_API_BASE=http://backend:8000
+    depends_on:
+      - backend
+    restart: unless-stopped
