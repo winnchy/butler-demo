@@ -14,6 +14,7 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 import heartbeat
+import guardian
 
 # ---- 配置 ----
 PORT = int(os.environ.get("PORT", 8080))
@@ -783,7 +784,8 @@ const BACKEND_URL = '/backend';
 @app.on_event("startup")
 async def start_heartbeat_scheduler():
     heartbeat.start_heartbeat(BACKEND_URL, BUTLER_DIR)
-    print("[chat_proxy] HEARTBEAT scheduler started")
+    guardian.start_guardian(BACKEND_URL, OPENAI_API_KEY, OPENAI_BASE_URL)
+    print("[chat_proxy] HEARTBEAT + GUARDIAN started")
 
 
 @app.get("/api/notifications")
