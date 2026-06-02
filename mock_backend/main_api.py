@@ -111,6 +111,20 @@ app.add_middleware(
 )
 
 
+@app.on_event("startup")
+async def startup_diagnostics():
+    """启动后打印诊断信息（用 logging，确保在 Railway 日志中可见）"""
+    import logging
+    log = logging.getLogger("uvicorn")
+    log.info(f"[DIAG] PORT env = {os.environ.get('PORT', 'NOT SET')}")
+    log.info(f"[DIAG] STATIC_DATA keys = {len(STATIC_DATA)}")
+    log.info(f"[DIAG] world_state = {world_state is not None}")
+    log.info(f"[DIAG] metro_network = {metro_network is not None}")
+    log.info(f"[DIAG] global_state.world_state = {global_state.world_state is not None}")
+    log.info(f"[DIAG] data/enriched exists = {os.path.exists('data/enriched')}")
+    log.info(f"[DIAG] cwd = {os.getcwd()}")
+
+
 # ---- 基础端点 ----
 
 @app.get("/")

@@ -12,4 +12,5 @@ COPY mock_backend/ .
 RUN python enrich_pois.py && python route_generator.py
 
 # Railway 通过 $PORT 注入端口
+# Force cache miss — v2 diagnostic update
 CMD ["python", "start_backend.py"]
