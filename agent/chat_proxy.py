@@ -842,7 +842,7 @@ const BACKEND_URL = '/backend';
 @app.on_event("startup")
 async def start_heartbeat_scheduler():
     heartbeat.start_heartbeat(BACKEND_URL, BUTLER_DIR)
-    guardian.start_guardian(BACKEND_URL, OPENAI_API_KEY, OPENAI_BASE_URL)
+    guardian.start_guardian(BACKEND_URL, OPENAI_API_KEY, OPENAI_BASE_URL, BUTLER_DIR)
     print("[chat_proxy] HEARTBEAT + GUARDIAN started")
 
 
