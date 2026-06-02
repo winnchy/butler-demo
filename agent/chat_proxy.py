@@ -100,7 +100,7 @@ def build_system_prompt(user_id: str) -> str:
     parts = []
 
     # 1. SOUL.md — 管家灵魂设定（精简，只保留性格+语言风格）
-    soul = read_file(os.path.join(BUTLER_DIR, "SOUL.md"), max_chars=1200)
+    soul = read_file(os.path.join(BUTLER_DIR, "SOUL.md"), max_chars=800)
     if soul:
         parts.append(soul)
     else:
@@ -129,11 +129,9 @@ def build_system_prompt(user_id: str) -> str:
 - 用户说"好吃/不好吃/太辣"→ 立即 memory_save
 
 **4. 🚫 输出红线（违反即失败）**：
-- 绝对禁止在回复中出现任何工具名（restaurant_recommend、get_weather、plan_route 等）
-- 绝对禁止输出代码块（```）、JSON、XML、函数调用语法
+- 绝对禁止在回复中出现任何工具名、代码块、JSON、XML、函数调用语法
+- 绝对禁止使用 Markdown 格式（**加粗**、`代码`、#标题等），纯文本回复即可
 - 绝对禁止说"让我调XX工具"、"正在查询XX接口"之类的话
-- 绝对禁止原始数据堆砌（如"get_schedule:\n今天没有日程"）
-- 你只能输出自然的、用户可读的中文回复
 - 工具调用的结果你要理解后用自然语言重新表达
 
 **5. 结构化输出**：回复必须清晰分层，用 emoji 标题分行展示，不要一大段文字。
@@ -156,10 +154,10 @@ def build_system_prompt(user_id: str) -> str:
 
     # 3. 当前用户画像
     parts.append("\n\n## 当前服务用户\n")
-    user_md = read_file(os.path.join(BUTLER_DIR, "USER.md"), max_chars=1500)
+    user_md = read_file(os.path.join(BUTLER_DIR, "USER.md"), max_chars=600)
     if user_md:
         parts.append(user_md)
-    memory_md = read_file(os.path.join(BUTLER_DIR, "MEMORY.md"), max_chars=1000)
+    memory_md = read_file(os.path.join(BUTLER_DIR, "MEMORY.md"), max_chars=400)
     if memory_md:
         parts.append(f"\n### 用户记忆\n{memory_md}")
 
@@ -394,7 +392,7 @@ def chat_direct_deepseek(message: str, user_id: str) -> str:
         system_prompt = build_system_prompt(user_id)
 
         # 获取对话历史（保留最近 10 轮）
-        history = CHAT_HISTORY.get(user_id, [])[-20:]
+        history = CHAT_HISTORY.get(user_id, [])[-6:]  # 最近3轮
         messages = [{"role": "system", "content": system_prompt}] + history + [
             {"role": "user", "content": message}
         ]
@@ -404,82 +402,108 @@ def chat_direct_deepseek(message: str, user_id: str) -> str:
             model="deepseek-chat",
             messages=messages,
             tools=TOOLS,
+            tool_choice="auto",
             temperature=0.7,
-            max_tokens=500,
+            max_tokens=800,
             timeout=20,
         )
 
         choice = response.choices[0]
         msg = choice.message
 
-        # ---- 如果 LLM 调了工具，执行并把结果发回 LLM 二次处理 ----
-        if msg.tool_calls:
-            # 添加 assistant 消息（含工具调用）
-            messages.append({
-                "role": "assistant",
-                "content": msg.content or "",
-                "tool_calls": [
-                    {
-                        "id": tc.id,
-                        "type": "function",
-                        "function": {"name": tc.function.name, "arguments": tc.function.arguments}
-                    }
-                    for tc in msg.tool_calls
-                ]
-            })
+        # ---- 收集工具调用（API方式 + 文本解析双保险）----
+        tool_calls_to_execute = []
 
-            # 执行每个工具并添加结果
+        # 方式1：API 原生 tool_calls
+        if msg.tool_calls:
             for tc in msg.tool_calls:
-                fn = tc.function
                 try:
-                    args = json.loads(fn.arguments)
+                    args = json.loads(tc.function.arguments)
                 except:
                     args = {}
-                tool_result = execute_tool(fn.name, args)
+                tool_calls_to_execute.append((tc.id, tc.function.name, args))
+
+        # 方式2：文本中嵌入的工具调用（兼容 DeepSeek 偶发的 XML 输出）
+        if msg.content and not tool_calls_to_execute:
+            text_tools = _parse_text_tools(msg.content)
+            for tt in text_tools:
+                tool_calls_to_execute.append((f"text_{tt[0]}", tt[0], tt[1]))
+
+        # ---- 执行工具并让 LLM 生成自然回答 ----
+        if tool_calls_to_execute:
+            # 构建 assistant 消息
+            assistant_msg = {"role": "assistant", "content": _clean_reply(msg.content or "")}
+            if msg.tool_calls:
+                assistant_msg["tool_calls"] = [
+                    {"id": tc.id, "type": "function",
+                     "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
+                    for tc in msg.tool_calls
+                ]
+            messages.append(assistant_msg)
+
+            # 执行工具
+            for tc_id, tc_name, tc_args in tool_calls_to_execute:
+                tool_result = execute_tool(tc_name, tc_args)
                 messages.append({
                     "role": "tool",
-                    "tool_call_id": tc.id,
+                    "tool_call_id": tc_id,
                     "content": tool_result
                 })
 
-            # ---- 第二轮：LLM 基于工具结果生成自然回答 ----
+            # 第二轮：生成自然回答
             response2 = client.chat.completions.create(
                 model="deepseek-chat",
                 messages=messages,
                 temperature=0.7,
-                max_tokens=600,
+                max_tokens=800,
                 timeout=20,
             )
-            reply = response2.choices[0].message.content or ""
-            reply = _clean_reply(reply)
-            # 保存历史
-            hist = CHAT_HISTORY.setdefault(user_id, [])
-            hist.append({"role": "user", "content": message})
-            hist.append({"role": "assistant", "content": reply})
-            if len(hist) > 20: hist[:] = hist[-20:]
-            return reply
+            reply = _clean_reply(response2.choices[0].message.content or "")
 
-        # ---- 无需工具调用，直接返回 ----
-        reply = msg.content or "收到，让我想想..."
-        reply = _clean_reply(reply)
+        else:
+            reply = _clean_reply(msg.content or "收到，让我想想...")
+
+        # 保存历史 + 返回
         hist = CHAT_HISTORY.setdefault(user_id, [])
         hist.append({"role": "user", "content": message})
         hist.append({"role": "assistant", "content": reply})
-        if len(hist) > 20: hist[:] = hist[-20:]
+        if len(hist) > 6: hist[:] = hist[-6:]
         return reply
 
     except Exception as e:
         return f"AI 服务异常: {str(e)[:200]}"
 
 
+def _parse_text_tools(text: str) -> list:
+    """从 LLM 文本输出中解析工具调用（兼容 DeepSeek XML 格式）"""
+    import re
+    tools = []
+    # 匹配 <invoke name="tool_name">...</invoke> 格式
+    pattern = r'<invoke\s+name="(\w+)"[^>]*>(.*?)</invoke>'
+    for m in re.finditer(pattern, text, re.DOTALL):
+        name = m.group(1)
+        body = m.group(2)
+        args = {}
+        # 解析 <parameter name="key" string="true">value</parameter>
+        for pm in re.finditer(r'<parameter\s+name="(\w+)"[^>]*>(.*?)</parameter>', body, re.DOTALL):
+            args[pm.group(1)] = pm.group(2).strip()
+        if name: tools.append((name, args))
+    # 匹配 {"name": "xxx", "arguments": {...}} JSON 格式
+    json_pattern = r'\{"name"\s*:\s*"(\w+)"\s*,\s*"arguments"\s*:\s*(\{[^}]+\})\}'
+    for m in re.finditer(json_pattern, text):
+        try:
+            name = m.group(1)
+            args = json.loads(m.group(2))
+            tools.append((name, args))
+        except: pass
+    return tools
+
+
 def _clean_reply(text: str) -> str:
     """过滤 LLM 响应中的原始工具调用语法和无关内容"""
     import re
-    # 去掉 XML 风格的工具调用块
-    text = re.sub(r'<\s*/?\s*invoke[^>]*>', '', text)
-    text = re.sub(r'<\s*/?\s*parameter[^>]*>', '', text)
-    text = re.sub(r'<\s*/?\s*tool_calls[^>]*>', '', text)
-    text = re.sub(r'<\s*/?\s*function[^>]*>', '', text)
+    # 去掉任何 XML/HTML 风格标签（如 <invoke>, <parameter>, <function> 等）
+    text = re.sub(r'<[^>]+>', '', text)
     # 去掉残留的工具调用 JSON/代码块
     text = re.sub(r'```[\s\S]*?```', '', text)
     # 合并多余空行
