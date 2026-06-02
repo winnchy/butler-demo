@@ -567,12 +567,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   <h2>Butler</h2>
   <div style="font-size:11px;color:#666;margin-bottom:8px">全天候私人管家 · 管理面板</div>
   <div class="divider"></div>
-  <div style="font-size:11px;color:#666;margin-bottom:4px">切换用户</div>
-  <button class="user-btn active" onclick="switchUser('white_collar')" id="btn-wc">小琴 · 白领</button>
-  <button class="user-btn" onclick="switchUser('parent')" id="btn-parent">小冉 · 宝妈</button>
-  <button class="user-btn" onclick="switchUser('student')" id="btn-student">小晴 · 大学生</button>
+  <div style="font-size:11px;color:#666;margin-bottom:4px">👤 当前用户</div>
+  <button class="user-btn active" onclick="switchUser('white_collar')" id="btn-wc">🏢 小琴 · 白领</button>
+  <button class="user-btn" onclick="switchUser('parent')" id="btn-parent">👶 小冉 · 宝妈</button>
+  <button class="user-btn" onclick="switchUser('student')" id="btn-student">🎓 小晴 · 大学生</button>
+  <div id="user-profile-card" style="background:#1e1e1e;border-radius:8px;padding:12px;margin-top:8px;font-size:12px;color:#aaa;line-height:1.6">
+    <div style="text-align:center;color:#555;padding:8px">点击用户查看档案</div>
+  </div>
   <div class="divider"></div>
-  <div style="font-size:11px;color:#666;margin-bottom:4px">场景触发</div>
+  <div style="font-size:11px;color:#666;margin-bottom:4px">🎬 场景触发</div>
   <button class="scene-btn" onclick="triggerScene('1')">1. 接待上级午餐</button>
   <button class="scene-btn" onclick="triggerScene('2')">2. 逛街突遇暴雨</button>
   <button class="scene-btn" onclick="triggerScene('7')">7. 乐乐凌晨发烧</button>
@@ -592,14 +595,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <button class="hamburger" onclick="document.getElementById('sidebar-el').classList.toggle('open')" title="管理面板">☰</button>
     <div class="avatar"></div>
     <div style="flex:1"><div class="title">全天候私人管家</div></div>
-    <div class="user-switch">
-      <select id="userSelect" onchange="switchUser(this.value)">
-        <option value="white_collar">小琴</option>
-        <option value="parent">小冉</option>
-        <option value="student">小晴</option>
-      </select>
-    </div>
-  </div>
     <button id="notif-bell" onclick="toggleNotifications()" style="background:none;border:none;font-size:18px;cursor:pointer;position:relative">🔔<span id="notif-badge" style="display:none;position:absolute;top:-5px;right:-5px;background:#dc2626;color:#fff;border-radius:50%;width:18px;height:18px;font-size:10px;line-height:18px;text-align:center">0</span></button>
   </div>
   <div id="notif-panel" style="display:none;position:fixed;top:56px;right:10px;background:#1e1e1e;border:1px solid #333;border-radius:12px;padding:12px;max-height:300px;overflow-y:auto;z-index:200;width:300px;box-shadow:0 8px 24px rgba(0,0,0,0.5)">
@@ -703,7 +698,7 @@ async function switchUser(uid) {
   addMessage('bot', greetings[uid] || '已切换用户～');
   document.querySelectorAll('.user-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('btn-' + (uid==='white_collar'?'wc':uid==='parent'?'parent':'student'))?.classList.add('active');
-  document.getElementById('userSelect').value = uid;
+  loadUserProfile(uid);
 }
 
 let isAutoPlaying = false;
@@ -829,6 +824,23 @@ async function toggleNotifications() {
 setInterval(pollNotifications, 30000);
 pollNotifications();
 
+
+async function loadUserProfile(uid) {
+  try {
+    const r = await fetch('/api/profile/' + uid);
+    const d = await r.json();
+    if (!d.ok) return;
+    const card = document.getElementById('user-profile-card');
+    let html = '<div style="font-size:14px;font-weight:600;color:#fff;margin-bottom:4px">' + d.icon + ' ' + d.name + '</div>';
+    html += '<div style="color:#888;font-size:11px;margin-bottom:6px">' + d.role + '</div>';
+    if (d.fields) {
+      for (const [k, v] of Object.entries(d.fields).slice(0, 8)) {
+        html += '<div><span style="color:#666">' + k + '</span> <span style="color:#ccc">' + v + '</span></div>';
+      }
+    }
+    card.innerHTML = html;
+  } catch(e) { console.error(e); }
+}
 const BACKEND_URL = '/backend';
 </script>
 </div>
@@ -844,6 +856,46 @@ async def start_heartbeat_scheduler():
     heartbeat.start_heartbeat(BACKEND_URL, BUTLER_DIR)
     guardian.start_guardian(BACKEND_URL, OPENAI_API_KEY, OPENAI_BASE_URL, BUTLER_DIR)
     print("[chat_proxy] HEARTBEAT + GUARDIAN started")
+
+
+@app.get("/api/profile/{user_id}")
+def get_user_profile(user_id: str):
+    """获取用户档案信息（给侧边栏展示）"""
+    info = USER_SWITCH_MAP.get(user_id)
+    if not info:
+        return {"error": "Unknown user", "available": list(USER_SWITCH_MAP.keys())}
+
+    # 读取用户画像文件提取关键信息
+    profile_path = os.path.join(BUTLER_DIR, "profiles", info["profile"])
+    content = read_file(profile_path, max_chars=3000)
+
+    # 解析 markdown 提取结构化字段
+    fields = {}
+    if content:
+        for line in content.split('\n'):
+            line = line.strip()
+            if line.startswith('- **') or line.startswith('- '):
+                # 尝试 key: value 格式
+                clean = line.lstrip('- ').replace('**', '')
+                if '：' in clean:
+                    k, v = clean.split('：', 1)
+                    fields[k.strip()] = v.strip()
+                elif ':' in clean:
+                    k, v = clean.split(':', 1)
+                    fields[k.strip()] = v.strip()
+
+    user_names = {"white_collar": "小琴", "parent": "小冉", "student": "小晴"}
+    user_icons = {"white_collar": "🏢", "parent": "👶", "student": "🎓"}
+    user_roles = {"white_collar": "白领 · 美团PM", "parent": "宝妈 · 自由插画师", "student": "大学生 · 金融硕士"}
+
+    return {
+        "ok": True,
+        "user_id": user_id,
+        "name": user_names.get(user_id, "?"),
+        "icon": user_icons.get(user_id, "👤"),
+        "role": user_roles.get(user_id, ""),
+        "fields": fields,
+    }
 
 
 @app.get("/api/notifications")

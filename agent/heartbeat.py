@@ -17,6 +17,12 @@ MAX_NOTIFICATIONS = 50
 
 # 上次触发记录（避免重复）
 _last_triggered = {}
+_active_user = "white_collar"  # 当前活跃用户，由 chat_proxy 更新
+
+
+def set_active_user(user_id: str):
+    global _active_user
+    _active_user = user_id
 
 
 def init_config(backend_url: str, butler_dir: str):
@@ -126,66 +132,66 @@ def _check_special_dates(user_id: str):
 
 def run_scheduled_tasks(now: datetime, hour: int, minute: int, weekday: int):
     """按 HEARTBEAT.md 时间表执行定时任务"""
-    users = ["white_collar", "parent", "student"]
+    uid = _active_user  # 只服务当前活跃用户，不越权
 
     # 07:00 — 早安推送：天气 + 穿搭 + 通勤
     if hour == 7 and minute < 5 and _should_trigger("morning", 20):
-        for uid in users:
-            w = _get_weather()
-            t = _get_traffic()
-            o = _get_outfit(uid)
-            s = _get_user_schedule(uid)
-            lines = [f"☀️ 早上好！"]
-            if w:
+        # 只推给当前活跃用户
+        w = _get_weather()
+        t = _get_traffic()
+        o = _get_outfit(uid)
+        s = _get_user_schedule(uid)
+        lines = [f"☀️ 早上好！"]
+        if w:
                 lines.append(f"🌤 {w.get('condition','?')} {w.get('temperature',w.get('current_temp','?'))}°C AQI{w.get('aqi','?')}")
-            if t:
+        if t:
                 lines.append(f"🚗 路况：拥堵指数{t.get('citywide_congestion','?')}")
-            if o:
+        if o:
                 lines.append(f"👔 {o.get('base_suggestion','?')}: {', '.join(o.get('recommended_items',[])[:3])}")
-            if s:
+        if s:
                 lines.append(f"📌 今日{s[0]['time']} {s[0]['title']}")
-            add_notification("schedule", "\n".join(lines), uid, "outfit+mobility")
+        add_notification("schedule", "\n".join(lines), uid, "outfit+mobility")
 
     # 11:30 — 午餐推荐
     if hour == 11 and 28 <= minute <= 32 and _should_trigger("lunch", 20):
-        for uid in users:
-            recs = _get_restaurant_recommend(uid)
-            if recs:
+        # 只推给当前活跃用户
+        recs = _get_restaurant_recommend(uid)
+        if recs:
                 r = recs[0]
                 msg = f"🍽️ 午饭时间～推荐：{r['name']} ⭐{r.get('rating','?')} ¥{r.get('avg_price','?')} {r.get('cuisine','')} | {r.get('distance_km','?')}km | {r.get('status','')}"
                 add_notification("schedule", msg, uid, "dining")
 
     # 17:30 — 晚高峰通勤 + 晚餐
     if hour == 17 and 28 <= minute <= 32 and _should_trigger("evening", 20):
-        for uid in users:
-            t = _get_traffic()
-            msg_parts = ["🌆 下班时间到！"]
-            if t:
+        # 只推给当前活跃用户
+        t = _get_traffic()
+        msg_parts = ["🌆 下班时间到！"]
+        if t:
                 msg_parts.append(f"🚗 晚高峰拥堵{t.get('citywide_congestion','?')}")
-            add_notification("schedule", "\n".join(msg_parts), uid, "mobility")
+        add_notification("schedule", "\n".join(msg_parts), uid, "mobility")
 
     # 21:00 — 明日天气 + 穿搭预告
     if hour == 21 and minute < 5 and _should_trigger("night", 20):
-        for uid in users:
-            o = _get_outfit(uid)
-            if o:
+        # 只推给当前活跃用户
+        o = _get_outfit(uid)
+        if o:
                 msg = f"🌙 明天穿搭建议：{o.get('base_suggestion','?')} — {', '.join(o.get('recommended_items',[])[:3])}"
                 add_notification("schedule", msg, uid, "outfit")
 
     # 周五 18:00 — 周末活动推荐
     if weekday == 4 and hour == 18 and minute < 5 and _should_trigger("weekend", 40):
-        for uid in users:
-            events = _get_events(uid)
-            if events:
+        # 只推给当前活跃用户
+        events = _get_events(uid)
+        if events:
                 e = events[0]
                 msg = f"🎉 周末啦！推荐：{e['name']} 📍{e.get('location','')} 📅{e.get('date','')} ¥{e.get('price',{}).get('regular','?') if isinstance(e.get('price'),dict) else e.get('price','?')}"
                 add_notification("schedule", msg, uid, "city")
 
     # 特殊日期检测 — 每天 8:00 检查
     if hour == 8 and minute < 5 and _should_trigger("special_dates", 60):
-        for uid in users:
-            dates = _check_special_dates(uid)
-            for d in dates:
+        # 只推给当前活跃用户
+        dates = _check_special_dates(uid)
+        for d in dates:
                 if d.get("days_left", 999) <= 3:
                     msg = f"📅 提醒：{d.get('name','')} 还有{d.get('days_left',0)}天！该准备了～"
                     add_notification("reminder", msg, uid, "life")
@@ -197,13 +203,13 @@ def run_scheduled_tasks(now: datetime, hour: int, minute: int, weekday: int):
 
 def run_event_monitors():
     """监听 WorldState 事件，跨 Skill 联动"""
-    users = ["white_collar", "parent", "student"]
+    uid = _active_user  # 只服务当前活跃用户
 
     # 1. 天气预警 → outfit + mobility + dining 联动
     alerts = _get_alerts()
     if alerts and _should_trigger("weather_alert", 15):
-        for uid in users:
-            for a in alerts[:2]:
+        # 只推给当前活跃用户
+        for a in alerts[:2]:
                 a_type = a.get('type', '')
                 level = a.get('level', '')
                 msg = f"⚠️ {a_type}{level}预警！"
@@ -218,9 +224,9 @@ def run_event_monitors():
     # 2. 路况异常 → mobility 告警
     t = _get_traffic()
     if t and t.get('citywide_congestion', 0) > 0.8 and _should_trigger("traffic_alert", 30):
-        for uid in users:
-            msg = f"🚨 全城严重拥堵（{t.get('citywide_congestion',0)}）！建议改地铁出行，预计比驾车快20分钟以上"
-            add_notification("alert", msg, uid, "mobility")
+        # 只推给当前活跃用户
+        msg = f"🚨 全城严重拥堵（{t.get('citywide_congestion',0)}）！建议改地铁出行，预计比驾车快20分钟以上"
+        add_notification("alert", msg, uid, "mobility")
 
 
 # ================================================================

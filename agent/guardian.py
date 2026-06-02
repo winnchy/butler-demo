@@ -223,11 +223,7 @@ def _assess_and_respond(event: dict):
     import heartbeat as hb
     hb.add_notification("alert", plan, uid, "cross-skill")
 
-    # 4. 如果是严重事件，给其他用户也推送简化版
-    if event["severity"] == "critical" and len(event["users"]) > 1:
-        for other_uid in event["users"][1:]:
-            brief = f"⚠️ {event['data'].get('condition','突发情况')}，请注意安全。需要帮助随时叫我。"
-            hb.add_notification("alert", brief, other_uid, "cross-skill")
+    # 管家只服务于当前活跃用户，不越权推送其他用户
 
 
 def _build_assessment_prompt(etype: str, data: dict, ctx: dict, uid: str) -> str:
