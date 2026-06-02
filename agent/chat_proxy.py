@@ -828,6 +828,10 @@ setInterval(pollNotifications, 30000);
 pollNotifications();
 
 
+function closeProfileCard() {
+  document.getElementById('user-profile-card').style.display = 'none';
+}
+
 async function showProfile(uid) {
   // 按钮高亮
   document.querySelectorAll('.user-btn').forEach(b => b.classList.remove('active'));
@@ -841,7 +845,7 @@ async function showProfile(uid) {
     const d = await r.json();
     if (!d.ok) { card.innerHTML = '<div style="color:#888">档案加载失败</div>'; return; }
 	    let rows = [];
-	    rows.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><div><span style="font-size:15px;font-weight:600;color:#fff">' + d.icon + ' ' + d.name + '</span><span style="color:#888;font-size:12px"> | ' + (d.age||'?') + '岁 | ' + (d.gender||'') + '</span></div><button onclick="document.getElementById('user-profile-card').style.display='none'" style="background:none;border:none;color:#666;cursor:pointer;font-size:16px">✕</button></div>');
+	    rows.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><div><span style="font-size:15px;font-weight:600;color:#fff">' + d.icon + ' ' + d.name + '</span><span style="color:#888;font-size:12px"> | ' + (d.age||'?') + '岁 | ' + (d.gender||'') + '</span></div><button onclick="closeProfileCard()" style="background:none;border:none;color:#666;cursor:pointer;font-size:16px">✕</button></div>');
 	    rows.push('<div style="color:#888;font-size:11px;margin-bottom:4px">' + d.role + '</div>');
 	    rows.push('<div style="border-top:1px solid #333;margin:4px 0"></div>');
 	    if (d.city) rows.push('<div style="margin-bottom:2px"><span style="color:#888">常驻：</span><span style="color:#ccc">' + d.city + '</span></div>');
