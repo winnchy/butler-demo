@@ -595,6 +595,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <button class="hamburger" onclick="document.getElementById('sidebar-el').classList.toggle('open')" title="管理面板">☰</button>
     <div class="avatar"></div>
     <div style="flex:1"><div class="title">全天候私人管家</div></div>
+    <div class="user-switch">
+      <select id="userSelect" onchange="switchUser(this.value)">
+        <option value="white_collar">小琴</option>
+        <option value="parent">小冉</option>
+        <option value="student">小晴</option>
+      </select>
+    </div>
     <button id="notif-bell" onclick="toggleNotifications()" style="background:none;border:none;font-size:18px;cursor:pointer;position:relative">🔔<span id="notif-badge" style="display:none;position:absolute;top:-5px;right:-5px;background:#dc2626;color:#fff;border-radius:50%;width:18px;height:18px;font-size:10px;line-height:18px;text-align:center">0</span></button>
   </div>
   <div id="notif-panel" style="display:none;position:fixed;top:56px;right:10px;background:#1e1e1e;border:1px solid #333;border-radius:12px;padding:12px;max-height:300px;overflow-y:auto;z-index:200;width:300px;box-shadow:0 8px 24px rgba(0,0,0,0.5)">
@@ -831,14 +838,18 @@ async function loadUserProfile(uid) {
     const d = await r.json();
     if (!d.ok) return;
     const card = document.getElementById('user-profile-card');
-    let html = '<div style="font-size:14px;font-weight:600;color:#fff;margin-bottom:4px">' + d.icon + ' ' + d.name + '</div>';
-    html += '<div style="color:#888;font-size:11px;margin-bottom:6px">' + d.role + '</div>';
-    if (d.fields) {
-      for (const [k, v] of Object.entries(d.fields).slice(0, 8)) {
-        html += '<div><span style="color:#666">' + k + '</span> <span style="color:#ccc">' + v + '</span></div>';
-      }
-    }
-    card.innerHTML = html;
+    let rows = [];
+    rows.push('<div style="font-size:14px;font-weight:600;color:#fff;margin-bottom:2px">' + d.icon + ' ' + d.name + ' | ' + (d.age||'?') + '岁 | ' + (d.gender||'') + '</div>');
+    rows.push('<div style="color:#888;font-size:11px;margin-bottom:6px">' + d.role + '</div>');
+    if (d.city) rows.push('<div style="margin-bottom:2px"><span style="color:#666">常驻</span> <span style="color:#ccc">' + d.city + '</span></div>');
+    if (d.work && !d.work.includes(d.home||'')) rows.push('<div style="margin-bottom:2px"><span style="color:#666">工作</span> <span style="color:#ccc">' + d.work.substring(0,40) + '</span></div>');
+    if (d.school && d.school !== d.work) rows.push('<div style="margin-bottom:2px"><span style="color:#666">学校</span> <span style="color:#ccc">' + d.school.substring(0,30) + '</span></div>');
+    if (d.home) rows.push('<div style="margin-bottom:2px"><span style="color:#666">居住</span> <span style="color:#ccc">' + d.home.substring(0,40) + '</span></div>');
+    if (d.family) rows.push('<div style="margin-bottom:2px"><span style="color:#666">家庭</span> <span style="color:#ccc">' + d.family.substring(0,60) + '</span></div>');
+    if (d.parents) rows.push('<div style="margin-bottom:2px"><span style="color:#666">父母</span> <span style="color:#ccc">' + d.parents.substring(0,40) + '</span></div>');
+    if (d.taste) rows.push('<div style="margin-bottom:2px"><span style="color:#666">口味</span> <span style="color:#ccc">' + d.taste.substring(0,50) + '</span></div>');
+    if (d.avoid) rows.push('<div style="margin-bottom:2px"><span style="color:#666">忌口</span> <span style="color:#ccc">' + d.avoid.substring(0,50) + '</span></div>');
+    card.innerHTML = rows.join('');
   } catch(e) { console.error(e); }
 }
 const BACKEND_URL = '/backend';
