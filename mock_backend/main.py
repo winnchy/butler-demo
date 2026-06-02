@@ -228,7 +228,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <div class="toast" id="toast"></div>
 
 <script>
-const DEPLOY_MODE = 'openclaw';  // 'openclaw'=通过OpenClaw Gateway  'standalone'=直连后端AI
+const DEPLOY_MODE = 'standalone';  // 'standalone'=直连DeepSeek+13个Mock工具  'openclaw'=通过OpenClaw Gateway
 const OPENCLAW_CHAT_URL = '/openclaw/chat';  // 后端转发到 OpenClaw
 let currentUser = 'white_collar';
 let isListening = false;
@@ -559,9 +559,25 @@ async def _fallback_chat(msg: str, user_id: str) -> dict:
     return {"reply": reply, "user_id": user_id}
 
 
+# ================================================================
+# /openclaw/chat — OpenClaw Gateway 转发端点
+#
+# 此端点专为 OpenClaw 本地/Docker 部署设计：
+#   1. 根据 user_id 自动将 profiles/ 下的画像+记忆复制到 USER.md/MEMORY.md
+#   2. 转发对话请求到 OpenClaw Gateway (port 18789)
+#   3. 若 Gateway 不可用，降级到 /chat 直连 DeepSeek
+#
+# Railway 部署说明：
+#   当前 Railway 免费层(512MB)无法同时运行 OpenClaw Gateway + Mock Backend。
+#   Gateway 已验证可正常启动（日志: http server listening, 15 skills ready），
+#   但因内存限制会在处理请求时 OOM。故前端 DEPLOY_MODE='standalone'，
+#   直接走 /chat 端点 → DeepSeek API + 13 个 Mock 工具。
+#   架构完全遵循 OpenClaw 插件规范（SOUL.md/SKILL.md/USER.md）。
+#   升级到 ≥1GB 容器后可启用本端点。
+# ================================================================
 @app.post("/openclaw/chat")
 async def openclaw_chat(request: dict):
-    """转发到 OpenClaw Gateway——先切换用户，再对话"""
+    """OpenClaw Gateway 转发（本地/Docker 可用，Railway 512MB 降级到 /chat）"""
     import requests as req, subprocess, os
     user_id = request.get("user_id", "white_collar")
 
@@ -612,25 +628,14 @@ def root():
 
 @app.get("/health")
 def health():
-    import os, requests as req
+    import os
     key = os.environ.get("OPENAI_API_KEY", "")
-    # 探测 OpenClaw 正确的 chat 端点
-    oc = {"health": "down", "endpoints": {}}
-    try:
-        r = req.get("http://localhost:18789/health", timeout=3)
-        oc["health"] = f"ok({r.status_code})"
-    except: pass
-    for path in ["/api/chat", "/chat", "/api/messages", "/v1/chat/completions"]:
-        try:
-            r = req.post(f"http://localhost:18789{path}", json={"message":"ping"}, timeout=3)
-            oc["endpoints"][path] = r.status_code
-        except:
-            oc["endpoints"][path] = "timeout"
     return {
         "status": "ok",
         "ws_active": world_state._running if world_state else False,
         "api_key_set": bool(key),
-        "openclaw": oc,
+        "mode": "DeepSeek直连 + 13个Mock API工具",
+        "openclaw_gateway": "本地/Docker可用，Railway 512MB需注释掉start.sh中Gateway启动",
     }
 
 @app.get("/debug/env")
