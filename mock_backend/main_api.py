@@ -42,25 +42,42 @@ def load_static_data(enriched_dir: str = "data/enriched"):
 async def lifespan(app: FastAPI):
     global metro_network, road_network, route_planner, world_state
 
-    print("=" * 50)
-    print("Mock Backend API Server Starting (Service 1)...")
-    print("=" * 50)
+    print("=" * 50, flush=True)
+    print("Mock Backend API Server Starting (Service 1)...", flush=True)
+    print("=" * 50, flush=True)
 
-    load_static_data()
+    try:
+        load_static_data()
+        print(f"[Server] Static data loaded: {len(STATIC_DATA)} categories", flush=True)
+    except Exception as e:
+        print(f"[Server] ERROR loading static data: {e}", flush=True)
+        import traceback; traceback.print_exc()
 
-    metro_path = "data/enriched/metro_stations.json"
-    if os.path.exists(metro_path):
-        with open(metro_path, "r", encoding="utf-8") as f:
-            metro_stations = json.load(f)
-        metro_network = MetroNetwork()
-        metro_network.build(metro_stations)
-        road_network = RoadNetwork()
-        road_network.build()
-        route_planner = RoutePlanner(metro_network, road_network)
+    try:
+        metro_path = "data/enriched/metro_stations.json"
+        if os.path.exists(metro_path):
+            with open(metro_path, "r", encoding="utf-8") as f:
+                metro_stations = json.load(f)
+            metro_network = MetroNetwork()
+            metro_network.build(metro_stations)
+            road_network = RoadNetwork()
+            road_network.build()
+            route_planner = RoutePlanner(metro_network, road_network)
+            print("[Server] Route planner initialized", flush=True)
+        else:
+            print(f"[Server] WARN: metro_stations.json not found at {metro_path}", flush=True)
+    except Exception as e:
+        print(f"[Server] ERROR building route network: {e}", flush=True)
+        import traceback; traceback.print_exc()
 
-    world_state = WorldState()
-    world_state.init_from_enriched("data/enriched")
-    world_state.start()
+    try:
+        world_state = WorldState()
+        world_state.init_from_enriched("data/enriched")
+        world_state.start()
+        print("[Server] WorldState started", flush=True)
+    except Exception as e:
+        print(f"[Server] ERROR starting WorldState: {e}", flush=True)
+        import traceback; traceback.print_exc()
 
     # 同步到 global_state 模块（供 api_routes 访问，避免循环导入）
     global_state.STATIC_DATA = STATIC_DATA
@@ -70,15 +87,14 @@ async def lifespan(app: FastAPI):
     global_state.world_state = world_state
 
     port = os.environ.get("PORT", "8000")
-    print(f"[Server] Mock Backend ready at http://0.0.0.0:{port}")
-    print(f"[Server] API docs at http://0.0.0.0:{port}/docs")
-    print(f"[Server] Admin dashboard at http://0.0.0.0:{port}/admin/dashboard")
+    print(f"[Server] Mock Backend ready at http://0.0.0.0:{port}", flush=True)
 
     yield
 
-    print("[Server] Shutting down...")
-    world_state.stop()
-    world_state.save_state("data/world_state_snapshot.json")
+    print("[Server] Shutting down...", flush=True)
+    if world_state:
+        world_state.stop()
+        world_state.save_state("data/world_state_snapshot.json")
 
 
 app = FastAPI(
