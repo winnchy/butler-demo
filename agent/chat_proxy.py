@@ -840,19 +840,18 @@ async function showProfile(uid) {
     const r = await fetch('/api/profile/' + uid);
     const d = await r.json();
     if (!d.ok) { card.innerHTML = '<div style="color:#888">档案加载失败</div>'; return; }
-    let rows = [];
-    rows.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><div><span style="font-size:14px;font-weight:600;color:#fff">' + d.icon + ' ' + d.name + '</span><span style="color:#888;font-size:12px"> ' + (d.age||'?') + '岁 | ' + (d.gender||'') + '</span></div><button onclick="document.getElementById(\'user-profile-card\').style.display=\'none\'" style="background:none;border:none;color:#666;cursor:pointer;font-size:16px">✕</button></div>');
-    rows.push('<div style="color:#888;font-size:11px;margin-bottom:6px">' + d.role + '</div>');
-    rows.push('<div style="border-top:1px solid #333;margin:4px 0"></div>');
-    if (d.city) rows.push('<div style="margin-bottom:2px"><span style="color:#666">常驻</span> <span style="color:#ccc">' + d.city + '</span></div>');
-    if (d.work && !d.work.includes(d.home||'')) rows.push('<div style="margin-bottom:2px"><span style="color:#666">工作</span> <span style="color:#ccc">' + d.work.substring(0,40) + '</span></div>');
-    if (d.school && d.school !== d.work) rows.push('<div style="margin-bottom:2px"><span style="color:#666">学校</span> <span style="color:#ccc">' + d.school.substring(0,30) + '</span></div>');
-    if (d.home) rows.push('<div style="margin-bottom:2px"><span style="color:#666">居住</span> <span style="color:#ccc">' + d.home.substring(0,40) + '</span></div>');
-    if (d.family) rows.push('<div style="margin-bottom:2px"><span style="color:#666">家庭</span> <span style="color:#ccc">' + d.family.substring(0,60) + '</span></div>');
-    if (d.parents) rows.push('<div style="margin-bottom:2px"><span style="color:#666">父母</span> <span style="color:#ccc">' + d.parents.substring(0,40) + '</span></div>');
-    if (d.taste) rows.push('<div style="margin-bottom:2px"><span style="color:#666">口味</span> <span style="color:#ccc">' + d.taste.substring(0,50) + '</span></div>');
-    if (d.avoid) rows.push('<div style="margin-bottom:2px"><span style="color:#666">忌口</span> <span style="color:#ccc">' + d.avoid.substring(0,50) + '</span></div>');
-    card.innerHTML = rows.join('');
+	    let rows = [];
+	    rows.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><div><span style="font-size:15px;font-weight:600;color:#fff">' + d.icon + ' ' + d.name + '</span><span style="color:#888;font-size:12px"> | ' + (d.age||'?') + '岁 | ' + (d.gender||'') + '</span></div><button onclick="document.getElementById('user-profile-card').style.display='none'" style="background:none;border:none;color:#666;cursor:pointer;font-size:16px">✕</button></div>');
+	    rows.push('<div style="color:#888;font-size:11px;margin-bottom:4px">' + d.role + '</div>');
+	    rows.push('<div style="border-top:1px solid #333;margin:4px 0"></div>');
+	    if (d.city) rows.push('<div style="margin-bottom:2px"><span style="color:#888">常驻：</span><span style="color:#ccc">' + d.city + '</span></div>');
+	    if (d.work) rows.push('<div style="margin-bottom:2px"><span style="color:#888">工作地址：</span><span style="color:#ccc">' + d.work + '</span></div>');
+	    if (d.school) rows.push('<div style="margin-bottom:2px"><span style="color:#888">学校地址：</span><span style="color:#ccc">' + d.school + '</span></div>');
+	    if (d.home) rows.push('<div style="margin-bottom:2px"><span style="color:#888">居住地址：</span><span style="color:#ccc">' + d.home + '</span></div>');
+	    if (d.family) rows.push('<div style="margin-bottom:2px"><span style="color:#888">家庭：</span><span style="color:#ccc">' + d.family + '</span></div>');
+	    if (d.taste) rows.push('<div style="margin-bottom:2px"><span style="color:#888">口味：</span><span style="color:#ccc">' + d.taste + '</span></div>');
+	    if (d.avoid) rows.push('<div style="margin-bottom:2px"><span style="color:#888">忌口：</span><span style="color:#ccc">' + d.avoid + '</span></div>');
+	    card.innerHTML = rows.join('');
   } catch(e) { card.innerHTML = '<div style="color:#888">加载失败: ' + e.message + '</div>'; }
 }
 const BACKEND_URL = '/backend';
@@ -874,42 +873,44 @@ async def start_heartbeat_scheduler():
 
 @app.get("/api/profile/{user_id}")
 def get_user_profile(user_id: str):
-    """获取用户档案信息（给侧边栏展示）"""
-    info = USER_SWITCH_MAP.get(user_id)
-    if not info:
-        return {"error": "Unknown user", "available": list(USER_SWITCH_MAP.keys())}
-
-    profile_path = os.path.join(BUTLER_DIR, "profiles", info["profile"])
-    content = read_file(profile_path, max_chars=5000)
-
-    def extract(key):
-        for line in content.split('\n'):
-            if key in line and ('：' in line or ':' in line):
-                val = line.split('：',1)[-1].split(':',1)[-1].strip().lstrip('- ').replace('**','')
-                if val: return val
-        return ""
-
-    user_names = {"white_collar": "小琴", "parent": "小冉", "student": "小晴"}
-    user_icons = {"white_collar": "🏢", "parent": "👶", "student": "🎓"}
-    user_roles = {"white_collar": "白领 · 美团PM", "parent": "宝妈 · 自由插画师", "student": "大学生 · 某985研一"}
-
-    return {
-        "ok": True,
-        "user_id": user_id,
-        "name": user_names.get(user_id, "?"),
-        "icon": user_icons.get(user_id, "👤"),
-        "role": user_roles.get(user_id, ""),
-        "city": extract("常驻城市"),
-        "age": extract("年龄"),
-        "gender": extract("性别"),
-        "work": extract("工作地点") or extract("实习公司地址") or extract("职业"),
-        "school": extract("学校地址") or extract("校区") or extract("学校"),
-        "home": extract("居住地点") or extract("居住区域") or extract("当前住宿"),
-        "family": extract("家庭结构"),
-        "parents": extract("父母") or extract("老家地址"),
-        "taste": extract("喜欢"),
-        "avoid": extract("忌口") or extract("过敏"),
+    """获取用户档案信息（给侧边栏展示）—— 精确结构化数据"""
+    PROFILES = {
+        "white_collar": {
+            "ok": True, "user_id": "white_collar",
+            "name": "小琴", "icon": "🏢", "role": "白领 · 产品经理",
+            "city": "北京", "age": "37", "gender": "女",
+            "work": "朝阳区，望京",
+            "home": "朝阳区，常营",
+            "family": "已婚，丈夫大刘(40岁)、女儿果果(4岁)，公婆(广东)、父母(广东)",
+            "taste": "粤菜、日料、清淡火锅、东南亚菜",
+            "avoid": "不吃香菜，果果花生过敏",
+        },
+        "parent": {
+            "ok": True, "user_id": "parent",
+            "name": "小冉", "icon": "👶", "role": "宝妈 · 自由插画师",
+            "city": "北京", "age": "29", "gender": "女",
+            "work": "居家办公",
+            "home": "朝阳区，东四环（与公婆同住）",
+            "family": "已婚，丈夫阿彬(32岁)、儿子乐乐(1.5岁)、宠物柯基布丁，公婆同住、父母(上海)",
+            "taste": "清淡家常菜、火锅、日料、面食",
+            "avoid": "全家不吃辣，乐乐不吃蛋清，阿彬不吃香菜",
+        },
+        "student": {
+            "ok": True, "user_id": "student",
+            "name": "小晴", "icon": "🎓", "role": "大学生 · 某985研一",
+            "city": "北京", "age": "23", "gender": "女",
+            "school": "通州区（有宿舍）",
+            "work": "海淀区，中关村",
+            "home": "公司附近租房（实习期）",
+            "family": "未婚，父母(广东)、弟弟小宇(13岁)",
+            "taste": "东南亚菜、重口味、辣、奶茶",
+            "avoid": "葱花香菜蒜、内脏、羊肉",
+        },
     }
+    p = PROFILES.get(user_id)
+    if not p:
+        return {"error": "Unknown user", "available": list(PROFILES.keys())}
+    return p
 
 
 @app.get("/api/notifications")
