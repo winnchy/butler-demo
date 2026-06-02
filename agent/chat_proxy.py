@@ -15,6 +15,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 import heartbeat
 import guardian
+from scenario_scripts import SCENARIO_SCRIPTS
 
 # ---- 配置 ----
 PORT = int(os.environ.get("PORT", 8080))
@@ -645,6 +646,7 @@ function toggleVoice() {
 }
 
 async function send() {
+  if (isAutoPlaying) { toast('沙盒演示中，请等待结束', 'err'); return; }
   const input = document.getElementById('userInput');
   const msg = input.value.trim();
   if (!msg) return;
@@ -704,15 +706,71 @@ async function switchUser(uid) {
   document.getElementById('userSelect').value = uid;
 }
 
+let isAutoPlaying = false;
+
 async function triggerScene(id) {
-  const scenes = {
-    '1':'接待上级午餐', '2':'逛街突遇暴雨', '7':'乐乐凌晨发烧', '9':'航班延误',
-    '14':'沙尘暴突袭', '15':'早高峰地铁故障', '18':'宠物急诊', '19':'餐厅临时歇业'
-  };
+  // 获取场景脚本
+  let script;
   try {
-    await fetch(BACKEND_URL + '/admin/trigger/scenario/' + id, {method:'POST'});
-    addMessage('bot', '<b>场景 ' + id + ' 已触发</b>: ' + (scenes[id]||''));
-  } catch(e) { toast('触发失败（后端未连接）', 'err'); }
+    const r = await fetch('/api/scenario/' + id);
+    const d = await r.json();
+    if (!d.ok) { toast('场景不存在', 'err'); return; }
+    script = d.scenario;
+  } catch(e) { toast('获取场景失败', 'err'); return; }
+
+  // 触发 WorldState 变化
+  try { await fetch(BACKEND_URL + '/admin/trigger/scenario/' + id, {method:'POST'}); } catch(e) {}
+  // 重置旧场景
+  try { await fetch(BACKEND_URL + '/admin/reset', {method:'POST'}); } catch(e) {}
+
+  // 清空聊天
+  document.getElementById('messages').innerHTML = '';
+
+  // 切换用户
+  currentUser = script.user;
+  document.getElementById('userSelect').value = script.user;
+  try { await fetch('/switch-user/' + script.user, {method:'POST'}); } catch(e) {}
+  document.querySelectorAll('.user-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('btn-' + (script.user==='white_collar'?'wc':script.user==='parent'?'parent':'student'))?.classList.add('active');
+
+  // 锁定输入
+  isAutoPlaying = true;
+  document.getElementById('userInput').disabled = true;
+  document.getElementById('userInput').placeholder = '🔄 沙盒演示中...';
+
+  // 开场标识
+  addMessage('bot', '🎬 <b>沙盒演示：' + script.title + '</b><br><span style="font-size:11px;color:#888">场景已激活，WorldState数据已更新，开始自动对话...</span>');
+
+  // 自动播放
+  for (let i = 0; i < script.steps.length; i++) {
+    const step = script.steps[i];
+    await new Promise(r => setTimeout(r, step.delay || 2000));
+    addMessage('user', step.msg);
+    // 发送真实请求，失败重试一次
+    let reply = '';
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const controller = new AbortController();
+        const to = setTimeout(() => controller.abort(), 60000);
+        const resp = await fetch('/chat', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({message: step.msg, user_id: script.user}),
+          signal: controller.signal
+        });
+        clearTimeout(to);
+        const data = await resp.json();
+        reply = data.reply || data.response || '';
+        if (reply) break;
+      } catch(e) { reply = '...重试中...'; await new Promise(r => setTimeout(r, 1000)); }
+    }
+    addMessage('bot', reply || '管家正在思考...');
+  }
+
+  // 解锁
+  isAutoPlaying = false;
+  document.getElementById('userInput').disabled = false;
+  document.getElementById('userInput').placeholder = '输入消息...';
+  addMessage('bot', '✅ <b>演示结束</b> — 你可以继续对话或选其他场景～');
 }
 
 async function resetAll() {
@@ -904,6 +962,15 @@ def debug_env():
         "soyl_md_exists": os.path.exists(os.path.join(BUTLER_DIR, "SOUL.md")),
         "user_md_exists": os.path.exists(os.path.join(BUTLER_DIR, "USER.md")),
     }
+
+
+@app.get("/api/scenario/{scenario_id}")
+def get_scenario_script(scenario_id: str):
+    """获取场景对话脚本"""
+    script = SCENARIO_SCRIPTS.get(scenario_id)
+    if not script:
+        return {"error": f"Unknown scenario: {scenario_id}"}
+    return {"ok": True, "scenario": script}
 
 
 @app.api_route("/backend/{path:path}", methods=["GET", "POST"])
