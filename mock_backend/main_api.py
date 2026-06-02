@@ -12,9 +12,9 @@ from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from world_state import WorldState
 from route_generator import MetroNetwork, RoadNetwork, RoutePlanner
-import shared
+import global_state
 
-# ---- 全局对象（通过 shared 模块暴露给 api_routes）----
+# ---- 全局对象（通过 global_state 模块暴露给 api_routes）----
 STATIC_DATA: dict = {}
 metro_network: MetroNetwork = None
 road_network: RoadNetwork = None
@@ -62,12 +62,12 @@ async def lifespan(app: FastAPI):
     world_state.init_from_enriched("data/enriched")
     world_state.start()
 
-    # 同步到 shared 模块（供 api_routes 访问，避免循环导入）
-    shared.STATIC_DATA = STATIC_DATA
-    shared.metro_network = metro_network
-    shared.road_network = road_network
-    shared.route_planner = route_planner
-    shared.world_state = world_state
+    # 同步到 global_state 模块（供 api_routes 访问，避免循环导入）
+    global_state.STATIC_DATA = STATIC_DATA
+    global_state.metro_network = metro_network
+    global_state.road_network = road_network
+    global_state.route_planner = route_planner
+    global_state.world_state = world_state
 
     port = os.environ.get("PORT", "8000")
     print(f"[Server] Mock Backend ready at http://0.0.0.0:{port}")

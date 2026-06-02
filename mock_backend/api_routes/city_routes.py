@@ -3,7 +3,7 @@
 import random
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Query
-import shared as main
+import global_state as main
 
 router = APIRouter()
 

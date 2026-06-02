@@ -1,6 +1,6 @@
 """
 共享全局状态 — 消除 main_api ↔ api_routes 之间的循环导入
-main_api.py 在初始化时设置这些引用，api_routes 通过 import shared 访问
+main_api.py 在初始化时设置这些引用，api_routes 通过 import global_state 访问
 """
 
 STATIC_DATA: dict = {}

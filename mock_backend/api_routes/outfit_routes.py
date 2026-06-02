@@ -3,7 +3,7 @@
 import random
 from datetime import datetime
 from fastapi import APIRouter
-import shared as main
+import global_state as main
 from config import get_seasonal_weather_base
 
 router = APIRouter()

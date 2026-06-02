@@ -6,7 +6,7 @@ from typing import Optional, List
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
-import shared as main
+import global_state as main
 from config import haversine, congestion_by_hour, is_rush_hour
 
 router = APIRouter()

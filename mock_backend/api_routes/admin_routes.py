@@ -4,7 +4,7 @@ import os
 import shutil
 from fastapi import APIRouter
 from fastapi.responses import HTMLResponse
-import shared as main
+import global_state as main
 
 router = APIRouter()
 
