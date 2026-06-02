@@ -879,28 +879,19 @@ def get_user_profile(user_id: str):
     if not info:
         return {"error": "Unknown user", "available": list(USER_SWITCH_MAP.keys())}
 
-    # 读取用户画像文件提取关键信息
     profile_path = os.path.join(BUTLER_DIR, "profiles", info["profile"])
-    content = read_file(profile_path, max_chars=3000)
+    content = read_file(profile_path, max_chars=5000)
 
-    # 解析 markdown 提取结构化字段
-    fields = {}
-    if content:
+    def extract(key):
         for line in content.split('\n'):
-            line = line.strip()
-            if line.startswith('- **') or line.startswith('- '):
-                # 尝试 key: value 格式
-                clean = line.lstrip('- ').replace('**', '')
-                if '：' in clean:
-                    k, v = clean.split('：', 1)
-                    fields[k.strip()] = v.strip()
-                elif ':' in clean:
-                    k, v = clean.split(':', 1)
-                    fields[k.strip()] = v.strip()
+            if key in line and ('：' in line or ':' in line):
+                val = line.split('：',1)[-1].split(':',1)[-1].strip().lstrip('- ').replace('**','')
+                if val: return val
+        return ""
 
     user_names = {"white_collar": "小琴", "parent": "小冉", "student": "小晴"}
     user_icons = {"white_collar": "🏢", "parent": "👶", "student": "🎓"}
-    user_roles = {"white_collar": "白领 · 美团PM", "parent": "宝妈 · 自由插画师", "student": "大学生 · 金融硕士"}
+    user_roles = {"white_collar": "白领 · 美团PM", "parent": "宝妈 · 自由插画师", "student": "大学生 · 某985研一"}
 
     return {
         "ok": True,
@@ -908,7 +899,16 @@ def get_user_profile(user_id: str):
         "name": user_names.get(user_id, "?"),
         "icon": user_icons.get(user_id, "👤"),
         "role": user_roles.get(user_id, ""),
-        "fields": fields,
+        "city": extract("常驻城市"),
+        "age": extract("年龄"),
+        "gender": extract("性别"),
+        "work": extract("工作地点") or extract("实习公司地址") or extract("职业"),
+        "school": extract("学校地址") or extract("校区") or extract("学校"),
+        "home": extract("居住地点") or extract("居住区域") or extract("当前住宿"),
+        "family": extract("家庭结构"),
+        "parents": extract("父母") or extract("老家地址"),
+        "taste": extract("喜欢"),
+        "avoid": extract("忌口") or extract("过敏"),
     }
 
 
