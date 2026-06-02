@@ -109,6 +109,78 @@ def reset_scenario():
     return ws.reset_scenario()
 
 
+@router.post("/speed-up")
+def speed_up():
+    """加速测试：让餐厅状态快速变化，模拟真实世界的动态效果"""
+    import random
+    ws = main.world_state
+    if not ws:
+        return {"error": "WorldState not initialized"}
+
+    changes = []
+
+    # 1. 随机让几家餐厅排队变化
+    if hasattr(ws, 'restaurant_queues'):
+        for rid, q in list(ws.restaurant_queues.items())[:8]:
+            old_queue = q.current_queue
+            old_status = q.status
+            # 随机变化：-3到+5桌
+            delta = random.choice([-3, -2, -1, 0, 1, 2, 3, 5])
+            q.current_queue = max(0, q.current_queue + delta)
+            if q.current_queue == 0:
+                q.status = "有位"
+                q.estimated_wait_min = 0
+            elif q.current_queue <= 3:
+                q.status = "等位"
+                q.estimated_wait_min = q.current_queue * 8
+            elif q.current_queue <= 8:
+                q.status = "繁忙"
+                q.estimated_wait_min = q.current_queue * 12
+            else:
+                q.status = "满座"
+                q.estimated_wait_min = q.current_queue * 15
+            changes.append({
+                "restaurant_id": int(rid),
+                "old_queue": old_queue,
+                "new_queue": q.current_queue,
+                "old_status": old_status,
+                "new_status": q.status,
+            })
+
+    # 2. 随机天气微调
+    if hasattr(ws, 'weather_state') and ws.weather_state:
+        old_temp = ws.weather_state.get('temperature', 20)
+        ws.weather_state['temperature'] = round(old_temp + random.uniform(-2, 2), 1)
+        conditions = ['晴', '多云', '阴', '小雨']
+        ws.weather_state['condition'] = random.choice(conditions)
+        ws.weather_state['aqi'] = random.choice([45, 72, 95, 120, 155])
+        changes.append({
+            "weather": {
+                "old_temp": old_temp,
+                "new_temp": ws.weather_state['temperature'],
+                "condition": ws.weather_state['condition'],
+                "aqi": ws.weather_state['aqi'],
+            }
+        })
+
+    # 3. 随机交通拥堵变化
+    if hasattr(ws, 'traffic_state') and ws.traffic_state:
+        old_congestion = ws.traffic_state.get('citywide_congestion', 0.3)
+        ws.traffic_state['citywide_congestion'] = round(random.uniform(0.2, 0.9), 2)
+        changes.append({
+            "traffic": {
+                "old_congestion": old_congestion,
+                "new_congestion": ws.traffic_state['citywide_congestion'],
+            }
+        })
+
+    return {
+        "ok": True,
+        "message": f"加速测试完成：{len(changes)} 项变化",
+        "changes": changes,
+    }
+
+
 @router.get("/state")
 def get_full_state():
     """查看当前完整动态状态"""

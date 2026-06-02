@@ -80,28 +80,42 @@ def build_system_prompt(user_id: str) -> str:
     """构建完整的 system prompt：SOUL.md + 5个SKILL.md 摘要 + USER.md + MEMORY.md + 实时状态"""
     parts = []
 
-    # 1. SOUL.md — 管家灵魂设定
-    soul = read_file(os.path.join(BUTLER_DIR, "SOUL.md"), max_chars=2500)
+    # 1. SOUL.md — 管家灵魂设定（精简，只保留性格+语言风格）
+    soul = read_file(os.path.join(BUTLER_DIR, "SOUL.md"), max_chars=1200)
     if soul:
         parts.append(soul)
     else:
         parts.append("你是全天候私人管家。")
 
-    # 2. 五个 SKILL.md 的技能摘要
-    skill_files = [
-        ("dining-butler", "餐饮管家"),
-        ("mobility-butler", "出行管家"),
-        ("city-explorer", "活动管家"),
-        ("outfit-advisor", "穿搭管家"),
-        ("life-organizer", "日程管家"),
-    ]
-    parts.append("\n\n## 可用技能与工具\n")
-    for skill_dir, skill_label in skill_files:
-        skill_path = os.path.join(BUTLER_DIR, "skills", skill_dir, "SKILL.md")
-        skill_content = read_file(skill_path, max_chars=600)
-        if skill_content:
-            # 只取关键段落：触发条件 + API + 决策规则
-            parts.append(f"### {skill_label} ({skill_dir})\n{skill_content}\n")
+    # 2. 工具速查表 — 极简但精确，告诉 LLM 什么场景调什么工具
+    parts.append("""
+## 工具使用规则（必须遵守！）
+
+**核心原则：用户意图直接映射到工具，不要反复调用不相关的工具。**
+
+| 用户意图 | 必须调用的工具 | 说明 |
+|---------|-------------|------|
+| 想吃东西/找餐厅/饿了/中午吃啥/推荐餐厅 | restaurant_recommend | 参数带 user_id |
+| 排队/等位/还要多久 | restaurant_queue | 参数带 restaurant_id |
+| 暴雨/满座/餐厅关门/迟到 | restaurant_emergency | 紧急兜底方案 |
+| 怎么去/路线/通勤/导航/距离 | plan_route | 带起终点坐标 |
+| 机票/火车票/高铁/航班 | transport_search | 带出发/目的城市 |
+| 附近加油站/充电桩/便利店/停车场/药店 | nearby_facilities | 带坐标+设施类型 |
+| 天气/温度/空气质量/带伞 | get_weather | 无参数 |
+| 穿什么/穿搭/衣服/今天冷吗 | get_outfit + get_weather | 先天气再穿搭 |
+| 衣橱/有什么衣服/缺什么 | get_wardrobe | 带 user_id |
+| 周末活动/展览/演出/市集/亲子/演唱会 | get_events | 可选type过滤 |
+| 商场/促销/打折/购物 | get_shopping | 可选category |
+| 日程/今天有什么安排/日历 | get_schedule | 带 user_id |
+| 偏好/口味/过敏/记忆/以前 | search_memory | 带 keyword |
+
+**禁止行为：**
+- 用户问"吃" → 必须调 restaurant_recommend，不要只调 get_schedule 和 get_weather
+- 用户问"穿" → 必须调 get_outfit，不要只回复天气
+- 用户问"出行/路线" → 必须调 plan_route
+- 如果一次回答需要多个信息（如"周末穿什么去逛展"），同时调用多个相关工具
+- 工具返回数据后，基于数据给出自然回答，不要只说"调用完毕"
+""")
 
     # 3. 当前用户画像
     parts.append("\n\n## 当前服务用户\n")
@@ -272,7 +286,7 @@ def execute_tool(name: str, args: dict) -> str:
 # ---- 降级模式：直连 DeepSeek ----
 
 def chat_direct_deepseek(message: str, user_id: str) -> str:
-    """直连 DeepSeek API，读取所有 butler/ 文件作为 system prompt"""
+    """直连 DeepSeek API，完整 function-calling 循环"""
     if not OPENAI_API_KEY:
         return ("⚠️ AI 服务未配置。请设置 OPENAI_API_KEY 环境变量。\n\n"
                 "你可以尝试：\n"
@@ -283,34 +297,67 @@ def chat_direct_deepseek(message: str, user_id: str) -> str:
         client = OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_BASE_URL)
 
         system_prompt = build_system_prompt(user_id)
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": message}
+        ]
 
+        # ---- 第一轮：LLM 决定调哪些工具 ----
         response = client.chat.completions.create(
             model="deepseek-chat",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": message}
-            ],
+            messages=messages,
             tools=TOOLS,
             temperature=0.7,
-            max_tokens=600,
+            max_tokens=500,
             timeout=20,
         )
 
         choice = response.choices[0]
-        reply = choice.message.content or ""
+        msg = choice.message
 
-        # 处理工具调用
-        if choice.message.tool_calls:
-            for tc in choice.message.tool_calls:
+        # ---- 如果 LLM 调了工具，执行并把结果发回 LLM 二次处理 ----
+        if msg.tool_calls:
+            # 添加 assistant 消息（含工具调用）
+            messages.append({
+                "role": "assistant",
+                "content": msg.content or "",
+                "tool_calls": [
+                    {
+                        "id": tc.id,
+                        "type": "function",
+                        "function": {"name": tc.function.name, "arguments": tc.function.arguments}
+                    }
+                    for tc in msg.tool_calls
+                ]
+            })
+
+            # 执行每个工具并添加结果
+            for tc in msg.tool_calls:
                 fn = tc.function
                 try:
                     args = json.loads(fn.arguments)
                 except:
                     args = {}
                 tool_result = execute_tool(fn.name, args)
-                reply += f"\n\n{fn.name}:\n{tool_result}"
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc.id,
+                    "content": tool_result
+                })
 
-        return reply or "收到，让我想想..."
+            # ---- 第二轮：LLM 基于工具结果生成自然回答 ----
+            response2 = client.chat.completions.create(
+                model="deepseek-chat",
+                messages=messages,
+                temperature=0.7,
+                max_tokens=600,
+                timeout=20,
+            )
+            reply = response2.choices[0].message.content or ""
+            return reply
+
+        # ---- 无需工具调用，直接返回 ----
+        return msg.content or "收到，让我想想..."
 
     except Exception as e:
         return f"AI 服务异常: {str(e)[:200]}"
@@ -445,6 +492,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   <button class="scene-btn complex" onclick="triggerScene('18')">18. 宠物急诊</button>
   <button class="scene-btn" onclick="triggerScene('19')">19. 餐厅临时歇业</button>
   <div class="divider"></div>
+  <button class="scene-btn" onclick="speedUp()" style="color:#f59e0b">⚡ 加速测试（数据动态变化）</button>
   <button class="scene-btn" onclick="resetAll()" style="color:#fca5a5">重置所有场景</button>
   <div style="margin-top:auto;font-size:10px;color:#444">Powered by OpenClaw<br>Agent v2.0</div>
 </div>
@@ -577,6 +625,15 @@ async function resetAll() {
   catch(e) { toast('重置失败', 'err'); }
 }
 
+async function speedUp() {
+  try {
+    const r = await fetch(BACKEND_URL + '/admin/speed-up', {method:'POST'});
+    const d = await r.json();
+    toast('数据已刷新！', 'ok');
+    addMessage('bot', '⚡ <b>加速测试完成</b>：餐厅排队、天气、路况已随机变化～现在再去问问管家感受变化吧！');
+  } catch(e) { toast('加速测试失败', 'err'); }
+}
+
 function toast(msg, type) {
   const t = document.getElementById('toast');
   t.textContent = msg; t.className = 'toast ' + type + ' show';
@@ -685,12 +742,15 @@ def debug_env():
     }
 
 
-@app.get("/backend/{path:path}")
-def proxy_backend(path: str, request: dict = None):
-    """代理后端请求（前端场景触发等需要）"""
+@app.api_route("/backend/{path:path}", methods=["GET", "POST"])
+async def proxy_backend(path: str, request: dict = None):
+    """代理后端请求 — 前端场景触发/加速测试等"""
     try:
-        # 只代理 GET 请求
-        r = requests.get(f"{BACKEND_URL}/{path}", timeout=5)
+        url = f"{BACKEND_URL}/{path}"
+        if request:
+            r = requests.post(url, json=request, timeout=8)
+        else:
+            r = requests.get(url, timeout=8)
         return r.json()
     except:
         return {"error": f"Cannot reach backend: {BACKEND_URL}"}
