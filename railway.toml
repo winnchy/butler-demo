@@ -19,4 +19,6 @@
 
 [build]
 builder = "DOCKERFILE"
-dockerfilePath = "mock_backend/Dockerfile"
+# 不指定 dockerfilePath — 两个服务在 Railway UI 中各自手动配置
+# Service 1: Dockerfile 路径 = mock_backend/Dockerfile
+# Service 2: Dockerfile 路径 = agent/Dockerfile
