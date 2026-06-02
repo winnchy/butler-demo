@@ -6,7 +6,7 @@ from typing import Optional, List
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
-import main
+import shared as main
 from config import haversine, match_cuisine, safe_float
 
 router = APIRouter()

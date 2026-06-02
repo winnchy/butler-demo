@@ -6,7 +6,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import Optional, List
 
-import main
+import shared as main
 
 router = APIRouter()
 
