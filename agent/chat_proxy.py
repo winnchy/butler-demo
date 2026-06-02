@@ -568,12 +568,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   <div style="font-size:11px;color:#666;margin-bottom:8px">全天候私人管家 · 管理面板</div>
   <div class="divider"></div>
   <div style="font-size:11px;color:#666;margin-bottom:4px">👤 当前用户</div>
-  <button class="user-btn active" onclick="switchUser('white_collar')" id="btn-wc">🏢 小琴 · 白领</button>
-  <button class="user-btn" onclick="switchUser('parent')" id="btn-parent">👶 小冉 · 宝妈</button>
-  <button class="user-btn" onclick="switchUser('student')" id="btn-student">🎓 小晴 · 大学生</button>
-  <div id="user-profile-card" style="background:#1e1e1e;border-radius:8px;padding:12px;margin-top:8px;font-size:12px;color:#aaa;line-height:1.6">
-    <div style="text-align:center;color:#555;padding:8px">点击用户查看档案</div>
-  </div>
+  <button class="user-btn active" onclick="showProfile('white_collar')" id="btn-wc">🏢 小琴 · 白领</button>
+  <button class="user-btn" onclick="showProfile('parent')" id="btn-parent">👶 小冉 · 宝妈</button>
+  <button class="user-btn" onclick="showProfile('student')" id="btn-student">🎓 小晴 · 大学生</button>
+  <div id="user-profile-card" style="display:none;background:#1e1e1e;border-radius:8px;padding:12px;margin-top:8px;font-size:12px;color:#aaa;line-height:1.6"></div>
   <div class="divider"></div>
   <div style="font-size:11px;color:#666;margin-bottom:4px">🎬 场景触发</div>
   <button class="scene-btn" onclick="triggerScene('1')">1. 接待上级午餐</button>
@@ -703,9 +701,7 @@ async function switchUser(uid) {
     student: '嗨小晴！今天中关村阴转多云22°C。需要帮什么忙？'
   };
   addMessage('bot', greetings[uid] || '已切换用户～');
-  document.querySelectorAll('.user-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('btn-' + (uid==='white_collar'?'wc':uid==='parent'?'parent':'student'))?.classList.add('active');
-  loadUserProfile(uid);
+  // header dropdown is for functional switching, sidebar for profile cards
 }
 
 let isAutoPlaying = false;
@@ -832,15 +828,22 @@ setInterval(pollNotifications, 30000);
 pollNotifications();
 
 
-async function loadUserProfile(uid) {
+async function showProfile(uid) {
+  // 按钮高亮
+  document.querySelectorAll('.user-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('btn-' + (uid==='white_collar'?'wc':uid==='parent'?'parent':'student'))?.classList.add('active');
+  // 加载档案
+  const card = document.getElementById('user-profile-card');
+  card.style.display = 'block';
+  card.innerHTML = '<div style="text-align:center;color:#555;padding:8px">加载中...</div>';
   try {
     const r = await fetch('/api/profile/' + uid);
     const d = await r.json();
-    if (!d.ok) return;
-    const card = document.getElementById('user-profile-card');
+    if (!d.ok) { card.innerHTML = '<div style="color:#888">档案加载失败</div>'; return; }
     let rows = [];
-    rows.push('<div style="font-size:14px;font-weight:600;color:#fff;margin-bottom:2px">' + d.icon + ' ' + d.name + ' | ' + (d.age||'?') + '岁 | ' + (d.gender||'') + '</div>');
+    rows.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><div><span style="font-size:14px;font-weight:600;color:#fff">' + d.icon + ' ' + d.name + '</span><span style="color:#888;font-size:12px"> ' + (d.age||'?') + '岁 | ' + (d.gender||'') + '</span></div><button onclick="document.getElementById(\'user-profile-card\').style.display=\'none\'" style="background:none;border:none;color:#666;cursor:pointer;font-size:16px">✕</button></div>');
     rows.push('<div style="color:#888;font-size:11px;margin-bottom:6px">' + d.role + '</div>');
+    rows.push('<div style="border-top:1px solid #333;margin:4px 0"></div>');
     if (d.city) rows.push('<div style="margin-bottom:2px"><span style="color:#666">常驻</span> <span style="color:#ccc">' + d.city + '</span></div>');
     if (d.work && !d.work.includes(d.home||'')) rows.push('<div style="margin-bottom:2px"><span style="color:#666">工作</span> <span style="color:#ccc">' + d.work.substring(0,40) + '</span></div>');
     if (d.school && d.school !== d.work) rows.push('<div style="margin-bottom:2px"><span style="color:#666">学校</span> <span style="color:#ccc">' + d.school.substring(0,30) + '</span></div>');
@@ -850,7 +853,7 @@ async function loadUserProfile(uid) {
     if (d.taste) rows.push('<div style="margin-bottom:2px"><span style="color:#666">口味</span> <span style="color:#ccc">' + d.taste.substring(0,50) + '</span></div>');
     if (d.avoid) rows.push('<div style="margin-bottom:2px"><span style="color:#666">忌口</span> <span style="color:#ccc">' + d.avoid.substring(0,50) + '</span></div>');
     card.innerHTML = rows.join('');
-  } catch(e) { console.error(e); }
+  } catch(e) { card.innerHTML = '<div style="color:#888">加载失败: ' + e.message + '</div>'; }
 }
 const BACKEND_URL = '/backend';
 </script>
