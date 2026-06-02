@@ -11,5 +11,5 @@ COPY mock_backend/ .
 # 生成模拟数据
 RUN python enrich_pois.py && python route_generator.py
 
-# Railway 通过 $PORT 注入端口，默认 8000
-CMD ["sh", "-c", "uvicorn main_api:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# Railway 通过 $PORT 注入端口
+CMD ["python", "start_backend.py"]
