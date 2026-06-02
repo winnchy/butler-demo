@@ -13,6 +13,7 @@ import requests
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
+import heartbeat
 
 # ---- 配置 ----
 PORT = int(os.environ.get("PORT", 8080))
@@ -597,6 +598,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       </select>
     </div>
   </div>
+    <button id="notif-bell" onclick="toggleNotifications()" style="background:none;border:none;font-size:18px;cursor:pointer;position:relative">🔔<span id="notif-badge" style="display:none;position:absolute;top:-5px;right:-5px;background:#dc2626;color:#fff;border-radius:50%;width:18px;height:18px;font-size:10px;line-height:18px;text-align:center">0</span></button>
+  </div>
+  <div id="notif-panel" style="display:none;position:fixed;top:56px;right:10px;background:#1e1e1e;border:1px solid #333;border-radius:12px;padding:12px;max-height:300px;overflow-y:auto;z-index:200;width:300px;box-shadow:0 8px 24px rgba(0,0,0,0.5)">
+    <div style="font-size:13px;font-weight:600;color:#fff;margin-bottom:8px">📬 管家提醒</div>
+    <div id="notif-list" style="font-size:12px;color:#aaa">暂无新通知</div>
+  </div>
   <div class="messages" id="messages">
     <div class="msg bot">
       <div class="avatar-mini"></div>
@@ -727,6 +734,42 @@ function toast(msg, type) {
   setTimeout(() => t.classList.remove('show'), 2000);
 }
 
+// 通知轮询（每30秒）
+async function pollNotifications() {
+  try {
+    const r = await fetch('/api/notifications?user_id=' + currentUser);
+    const d = await r.json();
+    const count = d.unread_count || 0;
+    const badge = document.getElementById('notif-badge');
+    if (count > 0) {
+      badge.style.display = 'block';
+      badge.textContent = count > 99 ? '99+' : count;
+    } else {
+      badge.style.display = 'none';
+    }
+    // 更新通知面板
+    const list = document.getElementById('notif-list');
+    if (d.notifications && d.notifications.length > 0) {
+      list.innerHTML = d.notifications.map(n => {
+        const icon = n.type === 'alert' ? '⚠️' : n.type === 'reminder' ? '📅' : '📬';
+        return '<div style="margin-bottom:6px;padding:6px;background:#262626;border-radius:6px;border-left:3px solid ' + (n.type==='alert'?'#dc2626':'#2563eb') + '"><div style="color:#888;font-size:10px">' + icon + ' ' + n.time + '</div><div style="white-space:pre-wrap">' + n.message + '</div></div>';
+      }).join('');
+    } else {
+      list.innerHTML = '<div style="color:#555">暂无新通知</div>';
+    }
+  } catch(e) {}
+}
+async function toggleNotifications() {
+  const panel = document.getElementById('notif-panel');
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+  if (panel.style.display === 'block') {
+    await pollNotifications();
+    await fetch('/api/notifications/read?user_id=' + currentUser, {method:'POST'});
+  }
+}
+setInterval(pollNotifications, 30000);
+pollNotifications();
+
 const BACKEND_URL = '/backend';
 </script>
 </div>
@@ -735,6 +778,38 @@ const BACKEND_URL = '/backend';
 
 
 # ---- FastAPI 端点 ----
+
+# 启动 HEARTBEAT 后台调度
+@app.on_event("startup")
+async def start_heartbeat_scheduler():
+    heartbeat.start_heartbeat(BACKEND_URL, BUTLER_DIR)
+    print("[chat_proxy] HEARTBEAT scheduler started")
+
+
+@app.get("/api/notifications")
+def get_notifications(user_id: str = "white_collar"):
+    """获取当前用户的推送通知"""
+    user_notifs = [n for n in heartbeat.notifications if n["user_id"] == user_id]
+    # 返回未读的 + 最近10条已读
+    unread = [n for n in user_notifs if not n["read"]]
+    recent = [n for n in user_notifs if n["read"]][:10]
+    return {
+        "notifications": (unread + recent)[:20],
+        "unread_count": len(unread),
+        "total": len(user_notifs),
+    }
+
+
+@app.post("/api/notifications/read")
+def mark_notifications_read(user_id: str = "white_collar"):
+    """标记所有通知为已读"""
+    count = 0
+    for n in heartbeat.notifications:
+        if n["user_id"] == user_id and not n["read"]:
+            n["read"] = True
+            count += 1
+    return {"ok": True, "marked_read": count}
+
 
 @app.get("/", response_class=HTMLResponse)
 def chat_ui():
