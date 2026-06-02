@@ -17,6 +17,9 @@ import heartbeat
 import guardian
 from scenario_scripts import SCENARIO_SCRIPTS
 
+# ---- 对话历史（按用户存储，实现多轮上下文）----
+CHAT_HISTORY = {}  # {user_id: [{role, content}, ...]}
+
 # ---- 配置 ----
 PORT = int(os.environ.get("PORT", 8080))
 BACKEND_URL = os.environ.get("BACKEND_URL", "http://localhost:8000")
@@ -144,6 +147,8 @@ def build_system_prompt(user_id: str) -> str:
 - 路线推荐格式：列出每个选项（🚗驾车 🚇地铁 🚲骑行 🚕打车），标注时间和费用
 
 **6. 记住上下文**：用户说"就第一家吧"→ 你知道是刚才推荐的第一个餐厅。
+
+**7. 场景聚焦**：只在用户明确提到家人时才能提及家人。商务宴请时不要提孩子、宠物、公婆等家庭话题。讨论周末带娃时才能提果果/乐乐。保持管家专业性。
 """)
 
     # 最后一道防线：输出格式约束
@@ -376,7 +381,7 @@ def execute_tool(name: str, args: dict) -> str:
 # ---- 降级模式：直连 DeepSeek ----
 
 def chat_direct_deepseek(message: str, user_id: str) -> str:
-    """直连 DeepSeek API，完整 function-calling 循环"""
+    """直连 DeepSeek API，完整 function-calling 循环 + 对话历史"""
     if not OPENAI_API_KEY:
         return ("⚠️ AI 服务未配置。请设置 OPENAI_API_KEY 环境变量。\n\n"
                 "你可以尝试：\n"
@@ -387,8 +392,10 @@ def chat_direct_deepseek(message: str, user_id: str) -> str:
         client = OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_BASE_URL)
 
         system_prompt = build_system_prompt(user_id)
-        messages = [
-            {"role": "system", "content": system_prompt},
+
+        # 获取对话历史（保留最近 10 轮）
+        history = CHAT_HISTORY.get(user_id, [])[-20:]
+        messages = [{"role": "system", "content": system_prompt}] + history + [
             {"role": "user", "content": message}
         ]
 
@@ -444,13 +451,40 @@ def chat_direct_deepseek(message: str, user_id: str) -> str:
                 timeout=20,
             )
             reply = response2.choices[0].message.content or ""
+            reply = _clean_reply(reply)
+            # 保存历史
+            hist = CHAT_HISTORY.setdefault(user_id, [])
+            hist.append({"role": "user", "content": message})
+            hist.append({"role": "assistant", "content": reply})
+            if len(hist) > 20: hist[:] = hist[-20:]
             return reply
 
         # ---- 无需工具调用，直接返回 ----
-        return msg.content or "收到，让我想想..."
+        reply = msg.content or "收到，让我想想..."
+        reply = _clean_reply(reply)
+        hist = CHAT_HISTORY.setdefault(user_id, [])
+        hist.append({"role": "user", "content": message})
+        hist.append({"role": "assistant", "content": reply})
+        if len(hist) > 20: hist[:] = hist[-20:]
+        return reply
 
     except Exception as e:
         return f"AI 服务异常: {str(e)[:200]}"
+
+
+def _clean_reply(text: str) -> str:
+    """过滤 LLM 响应中的原始工具调用语法和无关内容"""
+    import re
+    # 去掉 XML 风格的工具调用块
+    text = re.sub(r'<\s*/?\s*invoke[^>]*>', '', text)
+    text = re.sub(r'<\s*/?\s*parameter[^>]*>', '', text)
+    text = re.sub(r'<\s*/?\s*tool_calls[^>]*>', '', text)
+    text = re.sub(r'<\s*/?\s*function[^>]*>', '', text)
+    # 去掉残留的工具调用 JSON/代码块
+    text = re.sub(r'```[\s\S]*?```', '', text)
+    # 合并多余空行
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    return text.strip()
 
 
 # ---- 用户切换 ----
@@ -721,8 +755,9 @@ async function triggerScene(id) {
   // 重置旧场景
   try { await fetch(BACKEND_URL + '/admin/reset', {method:'POST'}); } catch(e) {}
 
-  // 清空聊天
+  // 清空聊天+历史
   document.getElementById('messages').innerHTML = '';
+  try { await fetch('/api/clear-history?user_id=' + script.user, {method:'POST'}); } catch(e) {}
 
   // 切换用户
   currentUser = script.user;
@@ -915,6 +950,14 @@ def get_user_profile(user_id: str):
     if not p:
         return {"error": "Unknown user", "available": list(PROFILES.keys())}
     return p
+
+
+@app.post("/api/clear-history")
+def clear_chat_history(user_id: str = "white_collar"):
+    """清空对话历史（场景切换时调用）"""
+    if user_id in CHAT_HISTORY:
+        CHAT_HISTORY[user_id] = []
+    return {"ok": True, "message": f"History cleared for {user_id}"}
 
 
 @app.get("/api/notifications")
