@@ -32,8 +32,8 @@ class RecommendRequest(BaseModel):
 
 class EmergencyRequest(BaseModel):
     user_id: str
-    original_restaurant_id: int
-    emergency_type: str     # weather, full, late
+    original_restaurant_id: Optional[int] = 0   # 可选，用于查找同品牌/同商圈备选
+    emergency_type: str     # weather, full, late, closure
     current_lat: float
     current_lng: float
     people_count: int = 1

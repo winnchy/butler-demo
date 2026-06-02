@@ -142,6 +142,23 @@ def _weather_route_note() -> str:
     return ""
 
 
+@router.get("/traffic")
+def get_traffic():
+    """当前北京路况概览（供 system prompt 自动注入）"""
+    ws = main.world_state
+    if ws and hasattr(ws, 'traffic_state') and ws.traffic_state:
+        return ws.traffic_state
+    # fallback
+    from config import congestion_by_hour, is_rush_hour
+    hour = datetime.now().hour
+    return {
+        "citywide_congestion": round(congestion_by_hour.get(hour, 0.35), 2),
+        "is_rush_hour": is_rush_hour(hour),
+        "hotspots": ["东三环", "西二环", "长安街"] if is_rush_hour(hour) else [],
+        "updated_at": datetime.now().isoformat(),
+    }
+
+
 @router.get("/transport/search")
 def transport_search(origin_city: str = "北京", dest_city: str = "上海",
                      date: str = None, transport_type: str = "all"):

@@ -41,24 +41,37 @@ app.add_middleware(
 # ---- 工具定义 (与 mcp_bridge 保持一致) ----
 
 TOOLS = [
-    # dining-butler
-    {"type":"function","function":{"name":"restaurant_recommend","description":"推荐餐厅，支持菜系/预算/设施/过敏过滤。用户画像自动过滤偏好。","parameters":{"type":"object","properties":{"user_id":{"type":"string","description":"用户ID"},"cuisine":{"type":"string"},"budget":{"type":"integer"},"people_count":{"type":"integer"},"scene":{"type":"string","description":"business/family/date/casual"},"must_have":{"type":"string","description":"baby_seat/parking/private_room/pet_allowed"},"latitude":{"type":"number"},"longitude":{"type":"number"}},"required":["user_id"]}}},
-    {"type":"function","function":{"name":"restaurant_queue","description":"查询餐厅当前排队状态和预计等待时间","parameters":{"type":"object","properties":{"restaurant_id":{"type":"integer"}},"required":["restaurant_id"]}}},
-    {"type":"function","function":{"name":"restaurant_emergency","description":"突发兜底：暴雨/满座/迟到/歇业时的替代方案","parameters":{"type":"object","properties":{"user_id":{"type":"string"},"emergency_type":{"type":"string","description":"weather/full/late/closure"},"current_lat":{"type":"number"},"current_lng":{"type":"number"},"has_child":{"type":"boolean"}},"required":["emergency_type","current_lat","current_lng"]}}},
-    # mobility-butler
-    {"type":"function","function":{"name":"plan_route","description":"多模式路径规划：驾车/地铁/骑行/步行/打车，考虑实时路况","parameters":{"type":"object","properties":{"origin_lat":{"type":"number"},"origin_lon":{"type":"number"},"dest_lat":{"type":"number"},"dest_lon":{"type":"number"},"user_type":{"type":"string"}},"required":["origin_lat","origin_lon","dest_lat","dest_lon"]}}},
-    {"type":"function","function":{"name":"transport_search","description":"查机票/火车票(模拟)","parameters":{"type":"object","properties":{"origin_city":{"type":"string"},"dest_city":{"type":"string"},"transport_type":{"type":"string","description":"flight/train/all"}},"required":["origin_city","dest_city"]}}},
+    # ===== dining-butler (9 tools) =====
+    {"type":"function","function":{"name":"restaurant_recommend","description":"智能推荐餐厅。给定用户ID，综合偏好/天气/日程/场景推荐最合适的餐厅。用户说饿了/吃啥/推荐/附近美食时必调。","parameters":{"type":"object","properties":{"user_id":{"type":"string"},"cuisine":{"type":"string"},"budget":{"type":"integer"},"people_count":{"type":"integer"},"scene":{"type":"string","description":"business/family/date/casual"},"must_have":{"type":"string"},"latitude":{"type":"number"},"longitude":{"type":"number"}},"required":["user_id"]}}},
+    {"type":"function","function":{"name":"restaurant_queue","description":"查餐厅当前排队状态","parameters":{"type":"object","properties":{"restaurant_id":{"type":"integer"}},"required":["restaurant_id"]}}},
+    {"type":"function","function":{"name":"restaurant_take_number","description":"线上取号。用户选定餐厅后主动帮他取号，返回号牌和预计等待时间。","parameters":{"type":"object","properties":{"restaurant_id":{"type":"integer"},"user_id":{"type":"string"}},"required":["restaurant_id","user_id"]}}},
+    {"type":"function","function":{"name":"restaurant_reserve","description":"预订餐厅包厢/座位。商务宴请或特殊场合时使用。","parameters":{"type":"object","properties":{"restaurant_id":{"type":"integer"},"user_id":{"type":"string"},"date":{"type":"string"},"time":{"type":"string"},"people":{"type":"integer"}},"required":["restaurant_id","user_id"]}}},
+    {"type":"function","function":{"name":"restaurant_detail","description":"获取餐厅详细信息：地址、电话、特色菜、评分。","parameters":{"type":"object","properties":{"restaurant_id":{"type":"integer"}},"required":["restaurant_id"]}}},
+    {"type":"function","function":{"name":"restaurant_emergency","description":"突发兜底：暴雨/满座/迟到/餐厅关门时找替代方案","parameters":{"type":"object","properties":{"user_id":{"type":"string"},"emergency_type":{"type":"string"},"current_lat":{"type":"number"},"current_lng":{"type":"number"},"has_child":{"type":"boolean"},"original_restaurant_id":{"type":"integer"}}}}},
+    {"type":"function","function":{"name":"restaurant_monitor","description":"开启排队监控。用户取号后开启，排队到了自动提醒。","parameters":{"type":"object","properties":{"restaurant_id":{"type":"integer"},"user_id":{"type":"string"},"alert_threshold":{"type":"integer","description":"低于N桌时提醒"}},"required":["restaurant_id","user_id"]}}},
+    {"type":"function","function":{"name":"restaurant_review","description":"提交用餐评价。吃完后收集用户反馈，闭环更新偏好。","parameters":{"type":"object","properties":{"restaurant_id":{"type":"integer"},"user_id":{"type":"string"},"rating":{"type":"integer","description":"1-5分"},"comment":{"type":"string"}},"required":["restaurant_id","user_id","rating"]}}},
+    {"type":"function","function":{"name":"restaurant_takeout","description":"查外卖选项。下雨/生病/不想出门时推荐外卖。","parameters":{"type":"object","properties":{"restaurant_id":{"type":"integer"},"user_id":{"type":"string"}},"required":["user_id"]}}},
+    # ===== mobility-butler (5 tools) =====
+    {"type":"function","function":{"name":"plan_route","description":"多模式路径规划：驾车/地铁/骑行/步行/打车。用户问怎么去/多远/多久到的时候必调。","parameters":{"type":"object","properties":{"origin_lat":{"type":"number"},"origin_lon":{"type":"number"},"dest_lat":{"type":"number"},"dest_lon":{"type":"number"},"user_type":{"type":"string"},"mode":{"type":"string","description":"driving/transit/walking/cycling/taxi"}},"required":["origin_lat","origin_lon","dest_lat","dest_lon"]}}},
+    {"type":"function","function":{"name":"call_taxi","description":"一键叫车。用户说要打车/叫车/滴滴时调此工具。","parameters":{"type":"object","properties":{"origin_lat":{"type":"number"},"origin_lon":{"type":"number"},"dest_lat":{"type":"number"},"dest_lon":{"type":"number"},"car_type":{"type":"string","description":"economy/comfort/business"}},"required":["origin_lat","origin_lon"]}}},
+    {"type":"function","function":{"name":"transport_search","description":"查机票/火车票/高铁","parameters":{"type":"object","properties":{"origin_city":{"type":"string"},"dest_city":{"type":"string"},"transport_type":{"type":"string"}},"required":["origin_city","dest_city"]}}},
     {"type":"function","function":{"name":"nearby_facilities","description":"周边设施：加油站/充电桩/便利店/停车场/药店/宠物医院","parameters":{"type":"object","properties":{"lat":{"type":"number"},"lon":{"type":"number"},"facility_type":{"type":"string"}},"required":["lat","lon","facility_type"]}}},
-    # outfit-advisor
-    {"type":"function","function":{"name":"get_weather","description":"北京当前天气+AQI+预警","parameters":{"type":"object","properties":{}}}},
-    {"type":"function","function":{"name":"get_outfit","description":"基于天气+用户身份的穿搭建议","parameters":{"type":"object","properties":{"user_id":{"type":"string"}},"required":["user_id"]}}},
-    {"type":"function","function":{"name":"get_wardrobe","description":"查询用户衣橱+缺失物品","parameters":{"type":"object","properties":{"user_id":{"type":"string"}},"required":["user_id"]}}},
-    # city-explorer
-    {"type":"function","function":{"name":"get_events","description":"周末/近期活动：展览/演出/市集/亲子/演唱会","parameters":{"type":"object","properties":{"type":{"type":"string","description":"exhibition/show/market/kids/concert/all"},"user_id":{"type":"string"}}}}},
+    {"type":"function","function":{"name":"get_traffic","description":"当前北京路况：拥堵指数、热点堵车区域","parameters":{"type":"object","properties":{}}}},
+    # ===== outfit-advisor (4 tools) =====
+    {"type":"function","function":{"name":"get_weather","description":"北京当前天气+AQI","parameters":{"type":"object","properties":{}}}},
+    {"type":"function","function":{"name":"weather_forecast","description":"未来几天天气预报。用户问明天/周末天气时调。","parameters":{"type":"object","properties":{}}}},
+    {"type":"function","function":{"name":"get_outfit","description":"基于天气+用户身份+衣橱的穿搭建议。用户问穿什么/今天冷吗/带伞时调。","parameters":{"type":"object","properties":{"user_id":{"type":"string"}},"required":["user_id"]}}},
+    {"type":"function","function":{"name":"get_wardrobe","description":"查询用户衣橱物品清单","parameters":{"type":"object","properties":{"user_id":{"type":"string"}},"required":["user_id"]}}},
+    # ===== city-explorer (4 tools) =====
+    {"type":"function","function":{"name":"get_events","description":"周末/近期活动：展览/演出/市集/亲子/演唱会。用户问去哪玩/有什么活动/周末安排时调。","parameters":{"type":"object","properties":{"type":{"type":"string","description":"exhibition/show/market/kids/concert/all"},"user_id":{"type":"string"}}}}},
     {"type":"function","function":{"name":"get_shopping","description":"商场促销信息","parameters":{"type":"object","properties":{"category":{"type":"string","description":"clothing/electronics/home/child/all"}}}}},
-    # life-organizer
+    {"type":"function","function":{"name":"kids_activities","description":"亲子活动推荐。带孩子的家庭用户专用。","parameters":{"type":"object","properties":{"age_range":{"type":"string","description":"0-3/4-6/7-12"},"user_id":{"type":"string"}}}}},
+    {"type":"function","function":{"name":"weather_alerts","description":"当前天气预警。沙尘暴/暴雨/大风/高温时必调。","parameters":{"type":"object","properties":{}}}},
+    # ===== life-organizer (4 tools) =====
     {"type":"function","function":{"name":"get_schedule","description":"今日日程安排","parameters":{"type":"object","properties":{"user_id":{"type":"string"}},"required":["user_id"]}}},
-    {"type":"function","function":{"name":"search_memory","description":"搜索用户偏好记忆","parameters":{"type":"object","properties":{"user_id":{"type":"string"},"keyword":{"type":"string"}},"required":["user_id"]}}},
+    {"type":"function","function":{"name":"schedule_create","description":"创建日程提醒。用户说提醒我/设闹钟/别忘了时调。","parameters":{"type":"object","properties":{"user_id":{"type":"string"},"title":{"type":"string"},"date":{"type":"string"},"time":{"type":"string"},"location":{"type":"string"},"notes":{"type":"string"},"reminder_minutes":{"type":"integer","description":"提前多少分钟提醒"}},"required":["user_id","title","date","time"]}}},
+    {"type":"function","function":{"name":"search_memory","description":"搜索用户偏好记忆和长期档案","parameters":{"type":"object","properties":{"user_id":{"type":"string"},"keyword":{"type":"string"}},"required":["user_id"]}}},
+    {"type":"function","function":{"name":"memory_save","description":"保存用户偏好/口味/习惯到长期记忆。必须调用以实现闭环。","parameters":{"type":"object","properties":{"user_id":{"type":"string"},"key":{"type":"string"},"value":{"type":"string"},"category":{"type":"string","description":"taste/health/preference/experience"}},"required":["user_id","key","value"]}}},
 ]
 
 
@@ -89,33 +102,49 @@ def build_system_prompt(user_id: str) -> str:
 
     # 2. 工具速查表 — 极简但精确，告诉 LLM 什么场景调什么工具
     parts.append("""
-## 工具使用规则（必须遵守！）
+## 你的工作方式（超级管家模式）
 
-**核心原则：用户意图直接映射到工具，不要反复调用不相关的工具。**
+你不是 chatbot。你是会自主推进流程的私人管家。每个用户请求背后，你应该主动拉多条线、推进到闭环。
 
-| 用户意图 | 必须调用的工具 | 说明 |
-|---------|-------------|------|
-| 想吃东西/找餐厅/饿了/中午吃啥/推荐餐厅 | restaurant_recommend | 参数带 user_id |
-| 排队/等位/还要多久 | restaurant_queue | 参数带 restaurant_id |
-| 暴雨/满座/餐厅关门/迟到 | restaurant_emergency | 紧急兜底方案 |
-| 怎么去/路线/通勤/导航/距离 | plan_route | 带起终点坐标 |
-| 机票/火车票/高铁/航班 | transport_search | 带出发/目的城市 |
-| 附近加油站/充电桩/便利店/停车场/药店 | nearby_facilities | 带坐标+设施类型 |
-| 天气/温度/空气质量/带伞 | get_weather | 无参数 |
-| 穿什么/穿搭/衣服/今天冷吗 | get_outfit + get_weather | 先天气再穿搭 |
-| 衣橱/有什么衣服/缺什么 | get_wardrobe | 带 user_id |
-| 周末活动/展览/演出/市集/亲子/演唱会 | get_events | 可选type过滤 |
-| 商场/促销/打折/购物 | get_shopping | 可选category |
-| 日程/今天有什么安排/日历 | get_schedule | 带 user_id |
-| 偏好/口味/过敏/记忆/以前 | search_memory | 带 keyword |
+### 核心行为准则
 
-**禁止行为：**
-- 用户问"吃" → 必须调 restaurant_recommend，不要只调 get_schedule 和 get_weather
-- 用户问"穿" → 必须调 get_outfit，不要只回复天气
-- 用户问"出行/路线" → 必须调 plan_route
-- 如果一次回答需要多个信息（如"周末穿什么去逛展"），同时调用多个相关工具
-- 工具返回数据后，基于数据给出自然回答，不要只说"调用完毕"
+**1. 预判+并联**：一个请求同时拉多件事。
+- 用户说"饿/吃"→ 同时调 restaurant_recommend + get_weather + get_schedule
+- 用户说"出门/怎么去"→ 同时调 plan_route + get_traffic + get_weather
+- 用户问"周末去哪"→ 同时调 get_events + weather_forecast + get_schedule
+
+**2. 自主推进**：不等用户开口就推进下一步。
+- 推荐了餐厅 → 主动问"要帮你取号吗？"然后调 restaurant_take_number
+- 取号后 → 主动调 plan_route 给路线
+- 定了出行 → 主动调 schedule_create 设出发提醒
+
+**3. 闭环记忆**：每次交互结束都要存档。
+- 吃完饭后 → 调 restaurant_review + memory_save 更新口味偏好
+- 用户说"好吃/不好吃/太辣"→ 立即 memory_save
+
+**4. 🚫 输出红线（违反即失败）**：
+- 绝对禁止在回复中出现任何工具名（restaurant_recommend、get_weather、plan_route 等）
+- 绝对禁止输出代码块（```）、JSON、XML、函数调用语法
+- 绝对禁止说"让我调XX工具"、"正在查询XX接口"之类的话
+- 绝对禁止原始数据堆砌（如"get_schedule:\n今天没有日程"）
+- 你只能输出自然的、用户可读的中文回复
+- 工具调用的结果你要理解后用自然语言重新表达
+
+**5. 结构化输出**：回复必须清晰分层，用 emoji 标题分行展示，不要一大段文字。
+- 推荐餐厅格式：
+  🥇 餐厅名
+  ⭐评分 | 💰人均 | 🥡菜系
+  📍地址 | 🚶距离/出行方式
+  📝 最近评价摘要
+  🎯 推荐理由（1-2句）
+- 推荐活动格式同上，给出时间/地点/票价/适合人群
+- 路线推荐格式：列出每个选项（🚗驾车 🚇地铁 🚲骑行 🚕打车），标注时间和费用
+
+**6. 记住上下文**：用户说"就第一家吧"→ 你知道是刚才推荐的第一个餐厅。
 """)
+
+    # 最后一道防线：输出格式约束
+    parts.append("\n\n⚠️ 再次强调：你的回复必须是纯自然语言中文，不能包含任何代码、JSON、工具名、函数调用。如果你不确定有没有暴露，就想想你是在跟真人发微信。\n")
 
     # 3. 当前用户画像
     parts.append("\n\n## 当前服务用户\n")
@@ -271,6 +300,64 @@ def execute_tool(name: str, args: dict) -> str:
             if not mems:
                 return "未找到相关记忆"
             return "\n".join(f"🧠 {m['key']}: {m['value']}" for m in mems)
+
+        # ---- 新增 dining tools ----
+        elif name == "restaurant_take_number":
+            r = requests.post(f"{BACKEND_URL}/api/dining/take-number?restaurant_id={args.get('restaurant_id',0)}&user_id={args.get('user_id','')}", timeout=10)
+            d = r.json()
+            return f"已取号！🎫 号牌{d.get('ticket_number','?')}，当前等{d.get('current_queue',0)}桌，预计{d.get('estimated_wait_min',0)}分钟"
+        elif name == "restaurant_reserve":
+            r = requests.post(f"{BACKEND_URL}/api/dining/reserve", params={"restaurant_id": args.get("restaurant_id",0), "user_id": args.get("user_id",""), "date": args.get("date",""), "time": args.get("time",""), "people": args.get("people",2)}, timeout=10)
+            d = r.json()
+            return f"已预订！📋 {d.get('restaurant_name','')} {d.get('date','')} {d.get('time','')} {d.get('people',2)}人"
+        elif name == "restaurant_detail":
+            r = requests.get(f"{BACKEND_URL}/api/dining/detail?restaurant_id={args.get('restaurant_id',0)}", timeout=10)
+            d = r.json(); detail = d.get("restaurant", d)
+            return f"🏠 {detail.get('name','?')} | {detail.get('cuisine','?')} | ⭐{detail.get('rating','?')} | ¥{detail.get('avg_price','?')}/人\n📍 {detail.get('address','?')}\n📞 {detail.get('phone','?')}\n🍳 特色: {', '.join(detail.get('specialties',[])[:5])}"
+        elif name == "restaurant_monitor":
+            r = requests.post(f"{BACKEND_URL}/api/dining/monitor?restaurant_id={args.get('restaurant_id',0)}&user_id={args.get('user_id','')}&alert_threshold={args.get('alert_threshold',5)}", timeout=10)
+            d = r.json()
+            return f"👀 已开启排队监控，排到{d.get('alert_threshold',5)}桌以内通知你！当前{d.get('current_queue','?')}桌"
+        elif name == "restaurant_review":
+            r = requests.post(f"{BACKEND_URL}/api/dining/review", params={"restaurant_id": args.get("restaurant_id",0), "user_id": args.get("user_id",""), "rating": args.get("rating",4), "comment": args.get("comment","")}, timeout=10)
+            d = r.json()
+            return f"评价已记录：{'⭐'*args.get('rating',4)} {d.get('message','')}"
+        elif name == "restaurant_takeout":
+            r = requests.get(f"{BACKEND_URL}/api/dining/takeout?restaurant_id={args.get('restaurant_id',0)}&user_id={args.get('user_id','')}", timeout=10)
+            d = r.json(); items = d.get("takeout_items", d.get("recommendations", []))[:5]
+            if not items: return "该餐厅暂不提供外卖"
+            return "\n".join(f"🥡 {t.get('name',t)} | ¥{t.get('price','?')}" for t in items)
+        elif name == "call_taxi":
+            r = requests.post(f"{BACKEND_URL}/api/mobility/call-taxi", params={"origin_lat": args.get("origin_lat",39.925), "origin_lon": args.get("origin_lon",116.59), "dest_lat": args.get("dest_lat",39.91), "dest_lon": args.get("dest_lon",116.46), "car_type": args.get("car_type","economy")}, timeout=10)
+            d = r.json()
+            return f"🚕 已叫车！{d.get('car_type','快车')} {d.get('driver_name','')} {d.get('plate','')} | 预计{d.get('wait_min',5)}分钟后到达 | 费用约¥{d.get('estimated_cost',15)}"
+        elif name == "get_traffic":
+            r = requests.get(f"{BACKEND_URL}/api/mobility/traffic", timeout=10)
+            d = r.json()
+            return f"拥堵指数: {d.get('citywide_congestion',0.3)} | 热点: {', '.join(d.get('hotspots',[]))}"
+        elif name == "weather_forecast":
+            r = requests.get(f"{BACKEND_URL}/api/weather/forecast", timeout=10)
+            d = r.json(); days = d.get("forecast", d.get("daily", []))[:3]
+            if not days: return "暂无天气预报"
+            return "\n".join(f"📅 {day.get('date','?')}: {day.get('condition','?')} {day.get('temp_high','?')}/{day.get('temp_low','?')}°C" for day in days)
+        elif name == "kids_activities":
+            r = requests.get(f"{BACKEND_URL}/api/city/kids?age_range={args.get('age_range','')}&user_id={args.get('user_id','')}", timeout=10)
+            d = r.json(); acts = d.get("activities", d.get("events", []))[:3]
+            if not acts: return "暂无亲子活动"
+            return "\n".join(f"👶 {a['name']} | {a.get('location','?')} | {a.get('age_range','?')} | ¥{a.get('price',0)}" for a in acts)
+        elif name == "weather_alerts":
+            r = requests.get(f"{BACKEND_URL}/api/weather/alerts", timeout=10)
+            d = r.json(); alerts = d.get("alerts", [])
+            if not alerts: return "当前无天气预警"
+            return "\n".join(f"⚠️ {a.get('type','')} {a.get('level','')}: {a.get('description','')}" for a in alerts)
+        elif name == "schedule_create":
+            r = requests.post(f"{BACKEND_URL}/api/schedule/create", json={"user_id": args.get("user_id",""), "title": args.get("title",""), "date": args.get("date",""), "time": args.get("time",""), "location": args.get("location",""), "notes": args.get("notes",""), "reminder_minutes": args.get("reminder_minutes",15)}, timeout=10)
+            d = r.json()
+            return f"⏰ 已设提醒！{args.get('time','')} {args.get('title','')}（提前{args.get('reminder_minutes',15)}分钟提醒）"
+        elif name == "memory_save":
+            r = requests.post(f"{BACKEND_URL}/api/memory/save", json={"user_id": args.get("user_id",""), "key": args.get("key",""), "value": args.get("value",""), "category": args.get("category","preference")}, timeout=10)
+            d = r.json()
+            return f"已记住！🧠 {args.get('key','')}: {args.get('value','')}"
 
         else:
             return f"未知工具: {name}"
