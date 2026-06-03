@@ -1182,7 +1182,7 @@ async def ws_probe():
     except:
         return {"error": "websockets not installed"}
     PASSWORD = "butler-demo-2026"
-    uri = "ws://localhost:18789/ws"
+    uri = "ws://localhost:18789/ws?password=butler-demo-2026"
     try:
         async with websockets.connect(uri, open_timeout=3) as ws:
             # 1. 接收 challenge
@@ -1190,14 +1190,14 @@ async def ws_probe():
             chal = j.loads(chal_raw)
             results["challenge"] = chal
             nonce = chal.get("payload",{}).get("nonce","")
-            # 2. 尝试多种认证方式（不同 type 值）
+            # 2. 尝试多种认证方式
             auth_attempts = [
-                # connect.response 事件格式
-                {"type":"event","event":"connect.response","payload":{"nonce":nonce,"auth":hmac.new(PASSWORD.encode(),nonce.encode(),hashlib.sha256).hexdigest()}},
-                # connect 指令格式
+                # HMAC-SHA256
                 {"type":"connect","payload":{"nonce":nonce,"auth":hmac.new(PASSWORD.encode(),nonce.encode(),hashlib.sha256).hexdigest()}},
                 # 直接发密码
                 {"type":"connect","payload":{"nonce":nonce,"password":PASSWORD}},
+                # Bearer token
+                {"type":"connect","payload":{"nonce":nonce,"token":PASSWORD}},
                 # 单发 nonce
                 {"type":"connect","payload":{"nonce":nonce}},
             ]
