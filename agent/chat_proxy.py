@@ -16,6 +16,47 @@ from fastapi.middleware.cors import CORSMiddleware
 import heartbeat
 import guardian
 from scenario_scripts import SCENARIO_SCRIPTS
+import threading
+import time as _time
+
+# ---- 实时监控（排队进度 / 叫车倒计时）----
+MONITORS = {}
+
+def _monitor_bg():
+    while True:
+        try:
+            for uid, monitors in list(MONITORS.items()):
+                for m in monitors:
+                    now = _time.time()
+                    if now - m.get("last_check", 0) < 30: continue
+                    m["last_check"] = now
+                    if m["type"] == "restaurant_queue":
+                        try:
+                            r = requests.get(f"{BACKEND_URL}/api/dining/queue?restaurant_id={m['restaurant_id']}", timeout=5)
+                            q = r.json()
+                            nq = q.get("current_queue", -1)
+                            oq = m.get("current_queue", -1)
+                            if nq != oq and nq >= 0:
+                                m["current_queue"] = nq
+                                m["wait_min"] = q.get("estimated_wait_min", 0)
+                                if nq <= 3:
+                                    heartbeat.add_notification("alert",
+                                        f"📳 {m['restaurant_name']}快到了！前面{nq}桌，预计{nq*5}分钟，可以出发了～", uid, "dining")
+                                else:
+                                    heartbeat.add_notification("schedule",
+                                        f"📊 {m['restaurant_name']}排队更新：前面{nq}桌（原{oq}桌），预计{nq*5}分钟", uid, "dining")
+                        except: pass
+                    elif m["type"] == "taxi":
+                        m["wait_min"] = max(0, m.get("wait_min", 5) - 0.5)
+                        if m["wait_min"] <= 2 and not m.get("arriving_notified"):
+                            m["arriving_notified"] = True
+                            heartbeat.add_notification("alert",
+                                f"🚕 车快到啦！{m.get('car_info','')}预计{m['wait_min']:.0f}分后到达", uid, "mobility")
+                MONITORS[uid] = [m for m in monitors if now - m.get("started_at", 0) < 7200]
+        except: pass
+        _time.sleep(30)
+
+threading.Thread(target=_monitor_bg, daemon=True).start()
 
 # ---- 对话历史（按用户存储，实现多轮上下文）----
 CHAT_HISTORY = {}  # {user_id: [{role, content}, ...]}
@@ -483,7 +524,13 @@ def execute_tool(name: str, args: dict) -> str:
         elif name == "restaurant_monitor":
             r = requests.post(f"{BACKEND_URL}/api/dining/monitor?restaurant_id={args.get('restaurant_id',0)}&user_id={args.get('user_id','')}&alert_threshold={args.get('alert_threshold',5)}", timeout=10)
             d = r.json()
-            return f"👀 已开启排队监控，排到{d.get('alert_threshold',5)}桌以内通知你！当前{d.get('current_queue','?')}桌"
+            uid = args.get('user_id','')
+            MONITORS.setdefault(uid, []).append({
+                "type": "restaurant_queue", "restaurant_id": args.get('restaurant_id',0),
+                "restaurant_name": d.get('restaurant_name','餐厅'), "current_queue": d.get('current_queue',0),
+                "wait_min": d.get('estimated_wait_min',0), "started_at": _time.time(), "last_check": 0,
+            })
+            return f"👀 已开启排队监控，当前{d.get('current_queue','?')}桌（预计{d.get('estimated_wait_min','?')}分钟），变化时通知你！"
         elif name == "restaurant_review":
             r = requests.post(f"{BACKEND_URL}/api/dining/review", params={"restaurant_id": args.get("restaurant_id",0), "user_id": args.get("user_id",""), "rating": args.get("rating",4), "comment": args.get("comment","")}, timeout=10)
             d = r.json()
@@ -496,7 +543,13 @@ def execute_tool(name: str, args: dict) -> str:
         elif name == "call_taxi":
             r = requests.post(f"{BACKEND_URL}/api/mobility/call-taxi", params={"origin_lat": args.get("origin_lat",39.925), "origin_lon": args.get("origin_lon",116.59), "dest_lat": args.get("dest_lat",39.91), "dest_lon": args.get("dest_lon",116.46), "car_type": args.get("car_type","economy")}, timeout=10)
             d = r.json()
-            return f"🚕 已叫车！{d.get('car_type','快车')} {d.get('driver_name','')} {d.get('plate','')} | 预计{d.get('wait_min',5)}分钟后到达 | 费用约¥{d.get('estimated_cost',15)}"
+            car_info = f"{d.get('car_color','')}{d.get('car_brand','')} {d.get('plate','')}"
+            # 注册叫车监控
+            MONITORS.setdefault(args.get('user_id',''), []).append({
+                "type": "taxi", "car_info": car_info, "wait_min": d.get('wait_min',5),
+                "started_at": _time.time(), "last_check": 0, "arriving_notified": False,
+            })
+            return f"🚕 已叫车！{car_info} {d.get('car_type','快车')} | 司机{d.get('driver_name','')} {d.get('driver_phone','')} | 预计{d.get('wait_min','?')}分钟到达 | 费用约¥{d.get('estimated_cost','?')}"
         elif name == "get_traffic":
             r = requests.get(f"{BACKEND_URL}/api/mobility/traffic", timeout=10)
             d = r.json()
@@ -1142,6 +1195,21 @@ def clear_chat_history(user_id: str = "white_collar"):
     if user_id in CHAT_HISTORY:
         CHAT_HISTORY[user_id] = []
     return {"ok": True, "message": f"History cleared for {user_id}"}
+
+
+@app.get("/api/monitors")
+def get_monitors(user_id: str = "white_collar"):
+    """获取当前活跃的实时监控状态（排队进度/叫车倒计时）"""
+    user_monitors = MONITORS.get(user_id, [])
+    result = []
+    for m in user_monitors:
+        item = {"type": m["type"], "started_at": m.get("started_at", 0)}
+        if m["type"] == "restaurant_queue":
+            item.update({"restaurant_name": m.get("restaurant_name",""), "current_queue": m.get("current_queue",0), "wait_min": m.get("wait_min",0)})
+        elif m["type"] == "taxi":
+            item.update({"car_info": m.get("car_info",""), "wait_min": m.get("wait_min",5)})
+        result.append(item)
+    return {"monitors": result, "active_count": len(result)}
 
 
 @app.get("/api/notifications")
