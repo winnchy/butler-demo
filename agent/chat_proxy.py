@@ -1177,12 +1177,28 @@ def debug_gateway():
     """探测 OpenClaw Gateway 暴露的所有端点"""
     import requests as req
     results = {}
-    # 探测所有可能的端点
-    for path in ["/openapi.json", "/api/openapi.json", "/v1/openapi.json",
-                 "/api/v1/openapi.json", "/.well-known/openapi.json",
-                 "/agent/chat", "/api/agent/chat", "/api/v1/agent/chat",
-                 "/api/conversation", "/api/messages",
-                 "/docs", "/redoc", "/api", "/"]:
+    # 探测 Gateway 暴露的所有端点
+    results = {}
+    # GET
+    for path in ["/openapi.json", "/api/openapi.json", "/api/trpc/agent.chat",
+                 "/api/trpc/agent.Chat", "/api/trpc/agent.send",
+                 "/api/agent/chat", "/api/v1/agent/chat",
+                 "/.well-known/openapi.json", "/api"]:
+        try:
+            r = req.get(f"http://localhost:18789{path}", timeout=3)
+            ct = r.headers.get("content-type","")
+            results[path] = {"status": r.status_code, "content_type": ct, "preview": r.text[:100]}
+        except Exception as e:
+            results[path] = {"error": str(e)[:80]}
+    # POST
+    for path in ["/api/trpc/agent.chat", "/api/trpc/agent.Chat",
+                 "/api/agent/chat", "/api/v1/agent/chat", "/api/chat"]:
+        try:
+            r = req.post(f"http://localhost:18789{path}", json={"message": "test"}, timeout=3)
+            ct = r.headers.get("content-type","")
+            results[f"POST {path}"] = {"status": r.status_code, "content_type": ct, "preview": r.text[:150]}
+        except Exception as e:
+            results[f"POST {path}"] = {"error": str(e)[:80]}
         try:
             r = req.get(f"http://localhost:18789{path}", timeout=3)
             results[path] = {"status": r.status_code, "preview": r.text[:200]}
