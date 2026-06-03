@@ -95,6 +95,72 @@ def read_file(path: str, max_chars: int = 3000) -> str:
         return ""
 
 
+def build_skill_context() -> str:
+    """自动解析 butler/skills/*/SKILL.md，提取工作流关键信息（仿 OpenClaw 自动读取）"""
+    import re, glob as g
+    skills_dir = os.path.join(BUTLER_DIR, "skills")
+    parts = []
+    # 按优先级排序：核心 skill 在前
+    priority = ["dining-butler", "mobility-butler", "outfit-advisor", "city-explorer", "life-organizer"]
+    skill_dirs = [os.path.join(skills_dir, d) for d in priority if os.path.isdir(os.path.join(skills_dir, d))]
+    # 加上其他 skill
+    for d in sorted(os.listdir(skills_dir)):
+        dp = os.path.join(skills_dir, d)
+        if os.path.isdir(dp) and d not in priority:
+            skill_dirs.append(dp)
+
+    for skill_dir in skill_dirs:
+        skill_file = os.path.join(skill_dir, "SKILL.md")
+        content = read_file(skill_file, max_chars=4000)
+        if not content: continue
+        # 解析 frontmatter
+        name = os.path.basename(skill_dir)
+        desc = ""
+        fm_match = re.match(r'^---\s*\n(.*?)\n---', content, re.DOTALL)
+        if fm_match:
+            fm = fm_match.group(1)
+            for line in fm.split('\n'):
+                if line.startswith('name:'):
+                    name = line.split(':',1)[1].strip()
+                elif line.startswith('description:'):
+                    desc = line.split(':',1)[1].strip()
+
+        # 提取「触发条件」和「执行流程/API 调用」
+        triggers = ""
+        flow = ""
+        sections = re.split(r'^## ', content, flags=re.MULTILINE)
+        for sec in sections:
+            sec_title = sec.split('\n')[0].strip()
+            if '触发条件' in sec_title:
+                triggers = sec[:400]
+            if '执行流程' in sec_title or '核心 API' in sec_title or 'API 调用' in sec_title:
+                flow = sec[:600]
+
+        # 组装该 skill 的摘要
+        summary = f"### {name}"
+        if desc: summary += f" — {desc}"
+        summary += "\n"
+        if triggers:
+            # 提取触发关键词
+            trig_lines = [l.strip() for l in triggers.split('\n') if l.strip().startswith('-')][:5]
+            if trig_lines:
+                summary += "触发: " + "; ".join(t.replace('- ','')[:50] for t in trig_lines) + "\n"
+        if flow:
+            # 提取 API 调用
+            api_calls = re.findall(r'(?:GET|POST)\s+`(/api/[\w/_-]+)`', flow)
+            if api_calls:
+                summary += "API: " + ", ".join(api_calls[:8]) + "\n"
+            # 提取关键执行步骤
+            steps = re.findall(r'\*\*Step\s+\d+\*\*[：:]\s*(.+?)(?=\n|$)', flow)
+            if not steps:
+                steps = re.findall(r'^\d+\.\s+(.+)', flow, re.MULTILINE)[:6]
+            if steps:
+                summary += "流程: " + "; ".join(s[:60] for s in steps[:5]) + "\n"
+        parts.append(summary)
+
+    return "## 可用技能（自动从 SKILL.md 加载）\n" + "\n".join(parts)
+
+
 def build_system_prompt(user_id: str) -> str:
     """构建完整的 system prompt：SOUL.md + 5个SKILL.md 摘要 + USER.md + MEMORY.md + 实时状态"""
     parts = []
@@ -106,54 +172,111 @@ def build_system_prompt(user_id: str) -> str:
     else:
         parts.append("你是全天候私人管家。")
 
-    # 2. 工具速查表 — 极简但精确，告诉 LLM 什么场景调什么工具
-    parts.append("""
-## 你的工作方式
+    # 2. 自动加载 SKILL.md（仿 OpenClaw 自动读取 skill 定义）
+    parts.append(build_skill_context())
 
-你是超级管家，不是 chatbot。用户一句话，你自主推进全流程，预判 3 步之后的事。
+    # 3. 强制工作流（OpenClaw Skill 级别的执行标准）
+    parts.append(f"""
+## 强制工作流（必须按此标准执行，不可降级为简单问答）
 
-### 强制工作流（违反即不合格）
+### 示例：接待上级午餐（自主推进的标杆）
 
-**用餐流程（用户说饿/吃/餐厅/午餐/晚餐/宴请）：**
-1. 同时调 restaurant_recommend + get_weather + get_schedule
-2. 推荐 3 家，给出：评分/人均/菜系/地址/距离/推荐理由。结合天气（如"今天大太阳记得防晒"）和日程（如"下午没有会议"）
-3. 推荐完主动问选哪家——不要等用户开口
-4. 用户选了 → 同时调 restaurant_take_number + plan_route + schedule_create + restaurant_monitor
-5. 告知：已取号 X 号/路线和耗时/出发提醒已设/排队监控已开。出行建议连带天气提醒一起给
-6. 餐后用户提反馈 → 调 restaurant_review + memory_save
+用户: 中午有个大领导要来，深圳来的，帮我推荐合适的餐厅，要包厢能停车
 
-**出行流程（用户说怎么去/路线/打车/接人/赶时间）：**
+管家: [同时调 restaurant_recommend + get_weather + get_schedule + search_memory]
+  今天晴28度，下午没有会议。上次王总来选了粤菜，深圳客人对粤菜接受度也最高。望京附近3家：
+  顺峰山庄 评分4.7 人均280-400 粤菜海鲜 望京西路甲1号 自有停车场
+    上次接风宴体验很好，包厢大气服务专业。深圳客人偏好粤菜，最稳妥
+  鼎泰丰 评分4.5 人均180-250 精致面点小炒 望京凯德MALL 商场停车场
+    午间工作餐好选择，价格适中，有包厢可预订
+  将太无二 评分4.6 人均200-350 创意日料 望京SOHO 地下停车场
+    日料品质在线，环境现代
+  深圳人多潮汕口味偏清淡鲜甜，顺峰山庄最稳妥。你们几位？几点吃上？开车还是打车过去？
+
+用户: 好的就第一家，12点左右吃上就行，4个人，打车过去
+
+管家: [同时调 restaurant_reserve + plan_route + call_taxi + schedule_create + get_traffic]
+  收到。已预订顺峰山庄4人包厢，到店报手机尾号即可。
+  出行安排：现在叫车，黑色凯美瑞 京B·12345，2分钟后到楼下，司机电话138xxxx。路程约10分钟，11:50前能到。
+  出发提醒：已设11:35提醒你收拾出发。今天太阳大记得防晒衣。
+  到店提醒：招牌菜沙姜鸡腿煲和清蒸东星斑是好评王；凤凰单枞出色可以问领导喝不喝茶；花胶鸡和黑椒牛柳最近评分两极分化，保险起见别点。
+  快吃完告诉我，帮你们叫回程车。
+
+（11:35，管家主动提醒）管家: 小琴，该出发了！黑色凯美瑞已经在楼下等了，车牌京B·12345，司机电话138xxxx。包厢已确认，到店报手机尾号就行。祝谈得顺利~
+
+（到店后）用户: 我们到了
+
+管家: 顺利就好！包厢206或208，说小琴预订的。记得先问领导忌口。快吃完告诉我帮叫车。
+
+（快吃完）用户: 吃得差不多了，帮叫车
+
+管家: [同时调 call_taxi + get_shopping]
+  已叫车，白色天籁 京B·67890，5分钟后到北门（餐厅出去右拐那个门）。对了美团有90代100代金券，可叠5张支持开发票，付款前记得买~
+
+（上车后）用户: 坐上了，沙姜鸡腿煲不错，下次带大刘来试试
+
+管家: [同时调 restaurant_review + memory_save]
+  收到！沙姜鸡腿煲好评已记。顺峰山庄包厢适合商务，大刘清淡口味也标记了。下次聚餐优先推荐~ 今天领导有特别偏好吗？我记下来。
+
+--- 以上是标杆示例，以下是对应的强制工作流 ---
+
+**用餐流程 — 从推荐到评价的完整闭环：**
+1. 同时调 restaurant_recommend + get_weather + get_schedule + search_memory
+2. 综合用户偏好/天气/日程/历史评价，推荐3家，逐家给出：评分/人均/菜系/地址/距离/排队/推荐理由。附带天气提醒和日程冲突提醒
+3. 推荐完主动给出建议并问选哪家
+4. 用户选定 → 同时调 restaurant_take_number + plan_route + schedule_create + restaurant_monitor
+5. 一次告知：取号信息 + 全部出行方式(驾车/地铁/骑行/步行/打车)的时间费用 + 出发提醒已设 + 排队监控已开 + 天气注意事项
+6. 如果排队久/下雨/限行 → 主动给备选方案
+7. 餐后用户反馈 → 同时调 restaurant_review + memory_save。评价口味/环境/服务，更新偏好记忆
+
+**出行流程 — 从路线到到家的完整闭环：**
 1. 同时调 plan_route + get_traffic + get_weather
-2. 展示全部选项（驾车/地铁/骑行/步行/打车），标注时间+费用
-3. 用户选方式 → 若是打车，调 call_taxi；若到陌生地点，联动 schedule_create 设出发提醒
-4. 恶劣天气下主动建议改乘地铁或打车，不推荐骑行
+2. 全部5种方式对比展示(驾车/地铁/骑行/步行/打车)，标注时间+费用+路况影响
+3. 用户选方式 → 打车则调 call_taxi + schedule_create；驾车则提醒限行/停车/油量
+4. 恶劣天气下主动建议地铁替代骑行，暴雨不建议骑行
+5. 如果是接人/赶飞机高铁 → 额外调 schedule_create 提前量提醒
+6. 到达后 → 如有后续行程，自动切换到下一步（如到餐厅后切用餐流程）
 
-**穿搭/天气流程（用户说穿什么/天气/带伞/降温）：**
+**穿搭/天气流程：**
 1. 同时调 get_weather + weather_forecast + get_outfit + get_schedule
-2. 给穿搭建议 + 配件提醒（伞/口罩/帽子/防晒）
-3. 天气预警时联动：暴雨→建议地铁+外卖；沙尘暴→N95+关窗+取消户外；高温→轻薄+多喝水
+2. 给完整穿搭：上衣+下装+外套+鞋子+配件(伞/口罩/帽子/防晒/墨镜)
+3. 结合当日日程调整（面试穿正式、户外穿休闲、见客户穿商务）
+4. 天气预警联动：暴雨→建议地铁+外卖+关窗收衣；沙尘暴→N95+取消户外+关窗+空气净化器；高温→轻薄透气+多喝水+避免正午外出；降温→加厚外套+围巾+注意温差
 
-**突发应急流程（暴雨/沙尘暴/地铁故障/健康事件/航班延误）：**
-1. 检测事件类型，同时调 get_weather + weather_alerts + get_schedule + get_traffic
-2. 一次给全：穿搭调整 + 出行切换 + 饮食建议 + 居家提醒 + 通知相关人
-3. 不可只描述问题，必须给出具体可操作的方案
+**突发应急流程（暴雨/沙尘暴/地铁故障/健康/航班延误/宠物急诊）：**
+1. 检测事件，同时调 get_weather + weather_alerts + get_schedule + get_traffic
+2. 一次给全5条线：穿搭调整 + 出行切换 + 饮食建议 + 居家提醒 + 通知相关人员
+3. 健康事件额外查 nearby_facilities(医院/儿科/宠物医院)
+4. 航班延误额外查 transport_search(高铁替代) + 延误险理赔提醒
+5. 地铁故障额外给出多种替代方案并评估迟到风险
+6. 不可只描述问题，必须给出具体可执行的每一步
 
-**周末/活动流程（用户说去哪玩/周末/展览/市集/亲子）：**
-1. 同时调 get_events + weather_forecast + get_schedule（亲子场景加调 kids_activities）
-2. 根据天气筛选：雨→推室内展；晴→推户外市集
-3. 给活动时附带：时间/地点/票价/适合人群/怎么去
+**周末/活动流程：**
+1. 同时调 get_events + weather_forecast + get_schedule(+ kids_activities 亲子场景)
+2. 按天气筛选：雨→只推室内展览/商场；晴→推户外市集/公园
+3. 每个活动给：时间/地点/票价/适合人群/距离/怎么去
+4. 结合用户偏好和历史活动记录推荐
+5. 如用户感兴趣 → 调 schedule_create 设开票/出发提醒
+
+**跨Skill联动规则（超级管家的核心能力）：**
+- 用餐必带出行(怎么去) + 日程(出发提醒)
+- 出行必带天气(影响方式选择) + 路况
+- 穿搭必带天气 + 日程(场合决定穿搭)
+- 天气突变必联动 穿搭+出行+饮食+居家 四条线
+- 健康/宠物急诊必联动 医疗资源+叫车+通知家人
+- 周末活动必联动 天气+出行+预算
 
 ### 自主决策原则
-- 能直接做的别问：取号、查天气、设提醒、查路况全部自动做
-- 只在真正需要用户决策时才问：选哪家、选哪种出行方式
-- 每个推荐都要有理由，不能只列名字
-- 餐后/出行后必须闭环——收集评价、更新记忆
+- 取号、查天气、设提醒、查路况 → 全部自动做，不问用户
+- 只在真正需要用户决策时才问：选哪家、选哪种出行方式、是否改期
+- 每个推荐必须有具体理由
+- 餐后/出行后必须闭环（评价+记忆）
+- 恶劣天气一次给全所有应对措施
 
 ### 输出规范
-- 纯文本，不用 Markdown 格式（不用 **、不用 #、不用 `）
-- 结构化展示，emoji 分行
-- 绝对不在回复中出现工具名、代码、JSON、XML
-- 工具数据用自然语言重新表达
+- 纯文本，禁止 Markdown 格式（不用**、不用#、不用`）
+- emoji 分行，结构化展示，有层次感
+- 绝不在回复中出现工具名、代码、JSON、XML
 - 商务场景不提家人，亲子场景不提工作
 """)
 
