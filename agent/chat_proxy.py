@@ -1131,7 +1131,45 @@ async def chat_endpoint(request: dict):
         except Exception:
             continue
 
-    # === 方案 2: 降级直连 DeepSeek ===
+    # === 方案 2: openclaw agent --local (读 butler 文件, 用 DeepSeek) ===
+    import subprocess, os as _os2
+    try:
+        _os2.environ["OPENCLAW_WORKSPACE"] = BUTLER_DIR
+        _os2.environ["OPENCLAW_GATEWAY_PASSWORD"] = "butler-demo-2026"
+        r = subprocess.run(
+            ["openclaw", "agent", "-m", msg, "--json", "--agent", "main", "--local"],
+            capture_output=True, text=True, timeout=25, cwd=BUTLER_DIR
+        )
+        if r.returncode == 0 and r.stdout:
+            try:
+                data = json.loads(r.stdout)
+                payloads = data.get("payloads", [])
+                parts = []
+                for p in payloads:
+                    t = p.get("text", "")
+                    if t:
+                        parts.append(t)
+                    # MCP 工具调用结果也可能在 payloads 中
+                    if p.get("type") == "tool_result":
+                        parts.append(p.get("content", ""))
+                oc_reply = "\n".join(parts)
+                if oc_reply and len(oc_reply) > 3:
+                    oc_reply = _clean_reply(oc_reply)
+                    return {"reply": oc_reply, "user_id": user_id, "mode": "openclaw_local"}
+            except json.JSONDecodeError:
+                # stdout 不是 JSON，检查是否是纯文本回复
+                raw = r.stdout.strip()
+                if raw and len(raw) > 3:
+                    raw = _clean_reply(raw)
+                    return {"reply": raw, "user_id": user_id, "mode": "openclaw_local"}
+    except subprocess.TimeoutExpired:
+        pass
+    except FileNotFoundError:
+        pass  # openclaw CLI 未安装
+    except Exception:
+        pass
+
+    # === 方案 3: 降级直连 DeepSeek ===
     reply = chat_direct_deepseek(msg, user_id)
     mode = "standalone"
     return {"reply": reply, "user_id": user_id, "mode": mode}
@@ -1164,11 +1202,12 @@ def health():
         "status": "ok",
         "service": "butler-agent",
         "openclaw_gateway": "running" if gw_ok else "unreachable",
+        "openclaw_cli": "available" if shutil.which("openclaw") else "not_found",
         "mock_backend": "connected" if backend_ok else "unreachable",
         "api_key_set": bool(OPENAI_API_KEY),
         "butler_dir": BUTLER_DIR,
         "butler_dir_exists": os.path.exists(BUTLER_DIR),
-        "mode": "standalone (降级模式)" if not gw_ok else "openclaw",
+        "modes": ["openclaw_gateway", "openclaw_local", "standalone"],
     }
 
 
@@ -1222,25 +1261,62 @@ async def ws_probe():
 
 @app.get("/debug/openclaw-cli")
 def openclaw_cli_help():
-    """测试 openclaw agent 命令通过 Gateway 对话"""
-    import subprocess, json as j
+    """测试 openclaw agent 命令 — 核心：让 agent 读取 butler workspace 文件"""
+    import subprocess, json as j, os as _os
     results = {}
-    # 尝试通过 openclaw CLI 和 Gateway 对话
-    # 设密码环境变量
-    import os as _os
+
+    # 0. 先看 openclaw agent --help 有什么参数
+    try:
+        r = subprocess.run("openclaw agent --help".split(), capture_output=True, text=True, timeout=15, cwd="/app")
+        results["--help"] = {"stdout": r.stdout[:800], "stderr": r.stderr[:300]}
+    except Exception as e:
+        results["--help"] = {"error": str(e)[:200]}
+
+    # 1. 核心测试：--local 模式 + 不同方式指定 workspace
     _os.environ["OPENCLAW_GATEWAY_PASSWORD"] = "butler-demo-2026"
-    for cmd in [
-        "openclaw agent -m 你好 --json --agent main --local",
-        "openclaw agent -m 你好 --json --agent main --token butler-demo-2026",
-        "openclaw agent -m 你好 --json --agent main",
-    ]:
+    _os.environ["OPENCLAW_WORKSPACE"] = "/app/butler"
+
+    # workspace 目录内容先确认
+    import os as _os2
+    butler_files = _os2.listdir("/app/butler") if _os2.path.exists("/app/butler") else ["NOT FOUND"]
+    results["butler_files"] = butler_files
+
+    test_cases = [
+        # --- A. --local + workspace 变体 ---
+        ("local+cwd_butler",            "openclaw agent -m 你是谁 --json --agent main --local", "/app/butler"),
+        ("local+cwd_app",               "openclaw agent -m 你是谁 --json --agent main --local", "/app"),
+        ("local+workspace_flag",        "openclaw agent -m 你是谁 --json --agent main --local --workspace /app/butler", "/app"),
+        ("local+workspace_short",       "openclaw agent -m 你是谁 --json --agent main --local -w /app/butler", "/app"),
+        ("local+workspace_env",         "openclaw agent -m 你是谁 --json --agent main --local", "/app"),
+        # --- B. Gateway 模式 + 认证变体 ---
+        ("gateway+token_flag",          "openclaw agent -m 你是谁 --json --agent main --token butler-demo-2026", "/app/butler"),
+        ("gateway+password_flag",       "openclaw agent -m 你是谁 --json --agent main --password butler-demo-2026", "/app/butler"),
+        ("gateway+no_auth",             "openclaw agent -m 你是谁 --json --agent main", "/app/butler"),
+        ("gateway+bearer_env",          "openclaw agent -m 你是谁 --json --agent main", "/app/butler"),
+        # --- C. Gateway REST 探活 ---
+        ("gateway_rest_probe",          "curl -s http://localhost:18789/health", "/app"),
+        ("gateway_rest_probe2",         "curl -s -H 'Authorization: Bearer butler-demo-2026' -X POST http://localhost:18789/api/v1/chat -d '{\"message\":\"hi\"}' -H 'Content-Type: application/json'", "/app"),
+    ]
+
+    for label, cmd, cwd in test_cases:
         try:
-            r = subprocess.run(cmd.split(), capture_output=True, text=True, timeout=30, cwd="/app")
-            results[cmd[:50]] = {"stdout": r.stdout[:500], "stderr": r.stderr[:300], "code": r.returncode}
+            r = subprocess.run(cmd.split() if not cmd.startswith("curl") else ["bash", "-c", cmd],
+                             capture_output=True, text=True, timeout=30, cwd=cwd)
+            out = r.stdout[:600]
+            # 检测是否知道自己是谁
+            knows_identity = any(kw in out for kw in ["管家", "butler", "小琴", "butler", "SOUL", "全天候"])
+            results[label] = {
+                "stdout": out,
+                "stderr": r.stderr[:200],
+                "code": r.returncode,
+                "knows_identity": knows_identity,
+                "cwd": cwd,
+            }
         except subprocess.TimeoutExpired:
-            results[cmd[:50]] = {"error": "timeout"}
+            results[label] = {"error": "timeout", "cwd": cwd}
         except Exception as e:
-            results[cmd[:50]] = {"error": str(e)[:200]}
+            results[label] = {"error": str(e)[:200], "cwd": cwd}
+
     return results
 
 

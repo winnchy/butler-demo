@@ -88,7 +88,41 @@ fi
 echo ""
 
 # ================================================================
-# 4. 启动 OpenClaw Gateway (后台)
+# 4. 确保 OpenClaw Agent 能读取 butler workspace 文件
+#    多重策略：环境变量 + config + agent目录拷贝
+# ================================================================
+echo ">>> Configuring butler workspace for OpenClaw agent..."
+
+# 策略1: 环境变量
+export OPENCLAW_WORKSPACE=/app/butler
+export OPENCLAW_WORKSPACE_DIR=/app/butler
+
+# 策略2: config set (针对 Gateway 模式)
+openclaw config set workspace /app/butler 2>/dev/null || true
+
+# 策略3: 复制 butler 文件到 agent 目录 (针对 --local 模式)
+#         openclaw agent --local 可能只读 ~/.openclaw/agents/main/ 或 CWD
+mkdir -p /root/.openclaw/agents/main
+for f in SOUL.md USER.md MEMORY.md HEARTBEAT.md wardrobe.md; do
+    if [ -f "/app/butler/$f" ]; then
+        cp "/app/butler/$f" "/root/.openclaw/agents/main/$f"
+        echo "  [copy] $f -> ~/.openclaw/agents/main/"
+    fi
+done
+# 也复制 skills 目录
+if [ -d "/app/butler/skills" ]; then
+    cp -r /app/butler/skills /root/.openclaw/agents/main/skills 2>/dev/null || true
+    echo "  [copy] skills/ -> ~/.openclaw/agents/main/"
+fi
+# 也复制 profiles 目录
+if [ -d "/app/butler/profiles" ]; then
+    cp -r /app/butler/profiles /root/.openclaw/agents/main/profiles 2>/dev/null || true
+    echo "  [copy] profiles/ -> ~/.openclaw/agents/main/"
+fi
+echo "[OK] Butler files mirrored to agent directory"
+
+# ================================================================
+# 5. 启动 OpenClaw Gateway (后台)
 #    读取 /app/butler 下的 SOUL.md + SKILL.md + USER.md + MEMORY.md
 #    可通过 MCP bridge 调用后端工具
 # ================================================================
@@ -98,10 +132,11 @@ export OPENCLAW_AUTH_ENABLED=false
 export NODE_ENV=development
 export DISABLE_CHALLENGE=true
 export OPENCLAW_GATEWAY_PASSWORD=butler-demo-2026
+export OPENCLAW_WORKSPACE=/app/butler
 # 配置 Gateway 密码供 CLI 使用
 openclaw config set gateway.auth.password butler-demo-2026 2>/dev/null || true
 openclaw config set gateway.auth.token butler-demo-2026 2>/dev/null || true
-openclaw gateway --port 18789 --allow-unconfigured --password butler-demo-2026 &
+openclaw gateway --port 18789 --allow-unconfigured --password butler-demo-2026 --workspace /app/butler &
 OC_PID=$!
 sleep 3
 if kill -0 $OC_PID 2>/dev/null; then
@@ -109,10 +144,21 @@ if kill -0 $OC_PID 2>/dev/null; then
 else
     echo "[WARN] Gateway failed to start"
 fi
+
+# 快速验证: --local 模式能否读到 butler 身份
+echo ">>> Quick test: openclaw agent --local identity check..."
+TEST_OUT=$(timeout 25 openclaw agent -m "你是谁" --json --agent main --local 2>&1 || true)
+if echo "$TEST_OUT" | grep -qiE "管家|butler|小琴|全天候|私人管家|SOUL"; then
+    echo "[OK] Agent knows its identity! (reads butler files)"
+else
+    echo "[WARN] Agent might not be reading butler files. First 300 chars:"
+    echo "$TEST_OUT" | head -c 300
+    echo ""
+fi
 echo ""
 
 # ================================================================
-# 5. 启动 Chat Proxy (前台 — Railway 通过 $PORT 路由)
+# 6. 启动 Chat Proxy (前台 — Railway 通过 $PORT 路由)
 #    提供 H5 聊天界面 + /chat 端点
 #    优先转发到 OpenClaw Gateway，不可用时降级直连 DeepSeek
 # ================================================================
