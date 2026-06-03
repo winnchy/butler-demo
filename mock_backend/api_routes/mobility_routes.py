@@ -220,12 +220,18 @@ def call_taxi(origin_lat: float, origin_lon: float,
               car_type: str = "快车"):
     """模拟叫车"""
     wait_time = random.randint(1, 8)
+    colors = ["黑色", "白色", "银色", "灰色", "蓝色"]
+    brands = ["凯美瑞", "天籁", "帕萨特", "雅阁", "卡罗拉", "迈腾"]
     return {
         "ok": True,
-        "driver_name": f"张师傅{random.choice('ABCDEFG')}",
-        "car_plate": f"京{random.choice('ABCDEFGH')}{random.randint(10000,99999)}",
+        "driver_name": f"张师傅",
+        "driver_phone": f"138{random.randint(1000,9999)}{random.randint(1000,9999)}",
+        "plate": f"京{random.choice('ABCDEFGH')}·{random.randint(10000,99999)}",
+        "car_color": random.choice(colors),
+        "car_brand": random.choice(brands),
         "car_type": car_type,
-        "estimated_arrival_min": wait_time,
+        "wait_min": wait_time,
+        "estimated_cost": random.randint(12, 35),
         "note": f"司机预计{wait_time}分钟后到达（模拟）",
     }
 
