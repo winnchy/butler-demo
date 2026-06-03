@@ -440,7 +440,7 @@ def execute_tool(name: str, args: dict) -> str:
 # ---- 降级模式：直连 DeepSeek ----
 
 def chat_direct_deepseek(message: str, user_id: str) -> str:
-    """直连 DeepSeek API，完整 function-calling 循环 + 对话历史"""
+    """Agent Loop：多轮自主调工具，直到 LLM 认为完成（最多5轮）"""
     if not OPENAI_API_KEY:
         return ("⚠️ AI 服务未配置。请设置 OPENAI_API_KEY 环境变量。\n\n"
                 "你可以尝试：\n"
@@ -451,52 +451,67 @@ def chat_direct_deepseek(message: str, user_id: str) -> str:
         client = OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_BASE_URL)
 
         system_prompt = build_system_prompt(user_id)
-
-        # 获取对话历史（保留最近 10 轮）
-        history = CHAT_HISTORY.get(user_id, [])[-6:]  # 最近3轮
+        history = CHAT_HISTORY.get(user_id, [])[-6:]
         messages = [{"role": "system", "content": system_prompt}] + history + [
             {"role": "user", "content": message}
         ]
 
-        # ---- 第一轮：LLM 决定调哪些工具 ----
-        response = client.chat.completions.create(
-            model="deepseek-chat",
-            messages=messages,
-            tools=TOOLS,
-            tool_choice="auto",
-            temperature=0.7,
-            max_tokens=800,
-            timeout=20,
-        )
+        MAX_ROUNDS = 5
+        final_reply = ""
 
-        choice = response.choices[0]
-        msg = choice.message
+        for round_num in range(MAX_ROUNDS):
+            response = client.chat.completions.create(
+                model="deepseek-chat",
+                messages=messages,
+                tools=TOOLS,
+                tool_choice="auto",
+                temperature=0.7,
+                max_tokens=800,
+                timeout=25,
+            )
 
-        # ---- 收集工具调用（API方式 + 文本解析双保险）----
-        tool_calls_to_execute = []
+            choice = response.choices[0]
+            msg = choice.message
 
-        # 方式1：API 原生 tool_calls
-        if msg.tool_calls:
-            for tc in msg.tool_calls:
-                try:
-                    args = json.loads(tc.function.arguments)
-                except:
-                    args = {}
-                tool_calls_to_execute.append((tc.id, tc.function.name, args))
+            # 收集工具调用
+            tool_calls_to_execute = []
+            if msg.tool_calls:
+                for tc in msg.tool_calls:
+                    try:
+                        args = json.loads(tc.function.arguments)
+                    except:
+                        args = {}
+                    tool_calls_to_execute.append((tc.id, tc.function.name, args))
 
-        # 方式2：文本中嵌入的工具调用（兼容 DeepSeek 偶发的 XML 输出）
-        if msg.content and not tool_calls_to_execute:
-            text_tools = _parse_text_tools(msg.content)
-            for tt in text_tools:
-                tool_calls_to_execute.append((f"text_{tt[0]}", tt[0], tt[1]))
+            # 如果没有工具调用 → LLM 认为完成了，直接取回复
+            if not tool_calls_to_execute:
+                # 文本工具调用检测（兜底）
+                if msg.content:
+                    text_tools = _parse_text_tools(msg.content)
+                    if text_tools:
+                        for tt in text_tools:
+                            tool_calls_to_execute.append((f"text_{tt[0]}", tt[0], tt[1]))
 
-        # ---- 执行工具并让 LLM 生成自然回答 ----
-        if tool_calls_to_execute:
-            # 构建 assistant 消息
-            # 工具调用时忽略思考文本，防止"我先查..."等内部推理泄露
-            thinking_text = msg.content or ""
-            has_thinking = any(kw in thinking_text for kw in ["我先", "帮你调", "帮你查", "让我", "先看看", "好的，"]) if thinking_text else False
-            assistant_msg = {"role": "assistant", "content": "" if has_thinking else _clean_reply(thinking_text)}
+                if not tool_calls_to_execute:
+                    final_reply = _clean_reply(msg.content or "")
+                    if final_reply and len(final_reply) > 3:
+                        break  # LLM 认为任务完成
+                    else:
+                        final_reply = "收到，让我想想..."
+                        break
+
+            # 有工具调用 → 执行并继续循环
+            # 构建 assistant 消息（清空思考文字，只保留 tool_calls）
+            thinking = msg.content or ""
+            has_thinking = any(kw in thinking for kw in [
+                "我先", "帮你调", "帮你查", "让我", "先看看", "好的，",
+                "扩大范围", "未找到", "让我再", "等一下",
+                "先查", "先帮", "看看"
+            ])
+            assistant_msg = {
+                "role": "assistant",
+                "content": "" if has_thinking else _clean_reply(thinking)
+            }
             if msg.tool_calls:
                 assistant_msg["tool_calls"] = [
                     {"id": tc.id, "type": "function",
@@ -514,79 +529,29 @@ def chat_direct_deepseek(message: str, user_id: str) -> str:
                     "content": tool_result
                 })
 
-            # 第二轮：生成自然回答
-            response2 = client.chat.completions.create(
+        # 如果循环结束还没有 final_reply，最后一轮生成
+        if not final_reply:
+            response_final = client.chat.completions.create(
                 model="deepseek-chat",
                 messages=messages,
                 temperature=0.7,
                 max_tokens=800,
                 timeout=20,
             )
-            reply = _clean_reply(response2.choices[0].message.content or "")
+            final_reply = _clean_reply(response_final.choices[0].message.content or "")
 
-        else:
-            reply = _clean_reply(msg.content or "收到，让我想想...")
-
-        # 保存历史 + 返回
+        # 保存历史
         hist = CHAT_HISTORY.setdefault(user_id, [])
         hist.append({"role": "user", "content": message})
-        hist.append({"role": "assistant", "content": reply})
-        if len(hist) > 6: hist[:] = hist[-6:]
-        return reply
+        hist.append({"role": "assistant", "content": final_reply})
+        if len(hist) > 12:
+            hist[:] = hist[-12:]
+
+        return final_reply
 
     except Exception as e:
-        return f"AI 服务异常: {str(e)[:200]}"
-
-
-def _parse_text_tools(text: str) -> list:
-    """从 LLM 文本输出中解析工具调用（兼容 DeepSeek XML 格式）"""
-    import re
-    tools = []
-    # 匹配 <invoke name="tool_name">...</invoke> 格式
-    pattern = r'<invoke\s+name="(\w+)"[^>]*>(.*?)</invoke>'
-    for m in re.finditer(pattern, text, re.DOTALL):
-        name = m.group(1)
-        body = m.group(2)
-        args = {}
-        # 解析 <parameter name="key" string="true">value</parameter>
-        for pm in re.finditer(r'<parameter\s+name="(\w+)"[^>]*>(.*?)</parameter>', body, re.DOTALL):
-            args[pm.group(1)] = pm.group(2).strip()
-        if name: tools.append((name, args))
-    # 匹配 {"name": "xxx", "arguments": {...}} JSON 格式
-    json_pattern = r'\{"name"\s*:\s*"(\w+)"\s*,\s*"arguments"\s*:\s*(\{[^}]+\})\}'
-    for m in re.finditer(json_pattern, text):
-        try:
-            name = m.group(1)
-            args = json.loads(m.group(2))
-            tools.append((name, args))
-        except: pass
-    return tools
-
-
-def _clean_reply(text: str) -> str:
-    """过滤 LLM 响应中的工具调用语法、Markdown、代码块、JSON、系统暴露"""
-    import re
-    if not text:
-        return ""
-    # 去掉任何 XML/HTML 风格标签
-    text = re.sub(r'<[^>]+>', '', text)
-    # 去掉代码块（含语言标记）
-    text = re.sub(r'```[\s\S]*?```', '', text)
-    # 去掉 Markdown 加粗
-    text = text.replace('**', '')
-    # 去掉 Markdown 分隔线
-    text = re.sub(r'^---+$', '', text, flags=re.MULTILINE)
-    # 去掉 Markdown 标题标记（保留文字）
-    text = re.sub(r'^#{1,6}\s+', '', text, flags=re.MULTILINE)
-    # 去掉行内代码
-    text = re.sub(r'`([^`]+)`', r'\1', text)
-    # 去掉 "第一/二/三轮" 等内部过程暴露
-    text = re.sub(r'第[一二三四五]轮[：:]?\s*', '', text)
-    text = re.sub(r'Step\s*\d+[：:]\s*', '', text)
-    # 去掉多余空行
-    text = re.sub(r'\n{3,}', '\n\n', text)
-    return text.strip()
-
+        # 返回错误但不暴露技术细节
+        return f"小管暂时有点忙，请稍后再试～"
 
 # ---- 用户切换 ----
 
@@ -637,20 +602,42 @@ def switch_user_files(user_id: str) -> dict:
 
 def _is_raw_data_leak(text: str) -> bool:
     """检测回复是否包含系统内部数据泄露（工具参数、推理过程等）"""
-    leak_patterns = [
-        r'\n"\w+":\s*"',        # JSON key-value
-        r'\n\[".+?"\]',          # JSON array
-        r'"\w+":\s*\[',          # JSON key with array
-        r'我先查', r'帮你调', r'让我看看',  # Internal reasoning
-        r'等一下，让我',           # Thinking pause
-        r'好的，\d+:\d+叫车',     # Scheduling talk
-    ]
     import re as _re
-    for pat in leak_patterns:
-        if _re.search(pat, text):
+    if not text or len(text) < 3:
+        return True  # 空/过短回复也是异常
+    leak_patterns = [
+        # JSON/工具参数泄露
+        (r'\n"\w+":\s*"', 'json key-value'),
+        (r'\n\[".+?"\]', 'json array'),
+        (r'"\w+":\s*\[', 'json key with array'),
+        # 内部推理文字
+        (r'我先查', 'reasoning'),
+        (r'帮你调', 'reasoning'),
+        (r'让我看看', 'reasoning'),
+        (r'等一下，让我', 'reasoning'),
+        (r'好的，\d+:\d+叫车', 'reasoning'),
+        (r'扩大范围再查', 'reasoning'),
+        (r'未找到直接匹配', 'no result leak'),
+        (r'让我再试', 'reasoning'),
+        # 裸工具参数（多行短文本 = 可能是工具参数泄露）
+        (r'^(?:white_collar|parent|student|business|family|casual|date)\s*$', 'user/type param', _re.MULTILINE),
+        (r'^(?:economy|comfort|business|driving|transit|walking|cycling|taxi)\s*$', 'transport param', _re.MULTILINE),
+        # 系统内部术语
+        (r'\[chat\]\s*standalone', 'log leak'),
+        (r'function.call|tool_call|tool_calls', 'api leak'),
+        (r'execute_tool|chat_direct_deepseek', 'code leak'),
+    ]
+    for item in leak_patterns:
+        pat = item[0]
+        flags = item[2] if len(item) > 2 else 0
+        if _re.search(pat, text, flags):
             return True
+    # 检测过短的单字行（工具参数泄露特征：多个连续单字行）
+    lines = [l for l in text.split('\n') if l.strip()]
+    short_lines = [l for l in lines if len(l.strip()) < 30 and not l.strip().startswith(('🥇','⭐','📍','💡','✅','🚗','🚇','🚕','🚲','🚶','🌡','👔','🎒','🛵','🍜','🎯','👥','🎫','🚕','🏷','▎','📋','🚘','⏱','💰'))]
+    if len(short_lines) >= 3 and len(short_lines) >= len(lines) * 0.5:
+        return True
     return False
-
 
 # 当前活跃用户（懒加载跟踪，避免重复文件复制）
 _current_active_user = None
@@ -1134,6 +1121,15 @@ def chat_ui():
     return CHAT_HTML
 
 
+
+# ---- 诊断：上一次聊天使用的模式 ----
+_last_chat_diag = {"mode": "unknown", "error": None, "rounds": 0}
+
+@app.get("/debug/last-chat")
+def debug_last_chat():
+    """查看上一次 /chat 请求使用了哪个模式"""
+    return _last_chat_diag
+
 @app.post("/chat")
 async def chat_endpoint(request: dict):
     """AI 对话端点：Standalone(全量butler+工具) → openclaw_local(降级) → Gateway(兜底)"""
@@ -1146,12 +1142,17 @@ async def chat_endpoint(request: dict):
     # 🔄 确保当前用户文件已切换（懒加载：请求时检测并切换）
     _ensure_user_switched(user_id)
 
-    # === 方案 1 (主力): Standalone — 极简 prompt + 25 工具 + function calling ===
+    # === 方案 1 (主力): Standalone — Agent Loop + 25 工具 ===
     try:
         reply = chat_direct_deepseek(msg, user_id)
         if reply and len(reply) > 5 and not _is_raw_data_leak(reply):
+            _last_chat_diag.update({"mode": "standalone", "error": None, "len": len(reply)})
             return {"reply": reply, "user_id": user_id, "mode": "standalone"}
+        else:
+            leak = _is_raw_data_leak(reply) if reply else False
+            _last_chat_diag.update({"mode": "standalone_rejected", "error": f"leak={leak} len={len(reply) if reply else 0}", "preview": (reply or "")[:200]})
     except Exception as e:
+        _last_chat_diag.update({"mode": "standalone_error", "error": str(e)[:200]})
         print(f"[chat] standalone error: {str(e)[:100]}")
 
     # === 方案 2 (降级): openclaw agent --local — 读 butler 文件, 用 DeepSeek ===
@@ -1174,6 +1175,7 @@ async def chat_endpoint(request: dict):
                         parts.append(t)
                 oc_reply = "\n".join(parts)
                 if oc_reply and len(oc_reply) > 3:
+                    _last_chat_diag.update({"mode": "openclaw_local", "error": None, "len": len(oc_reply)})
                     return {"reply": _clean_reply(oc_reply), "user_id": user_id, "mode": "openclaw_local"}
             except json.JSONDecodeError:
                 raw = r.stdout.strip()
