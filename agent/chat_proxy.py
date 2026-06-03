@@ -1227,12 +1227,12 @@ def openclaw_cli_help():
     results = {}
     # 尝试通过 openclaw CLI 和 Gateway 对话
     for cmd in [
-        "openclaw agent -m 你好 --json --password butler-demo-2026 --timeout-ms 15000",
-        "openclaw agent -m 你好 --json --local --timeout-ms 15000",
-        "openclaw agent -m 你好 --json --password butler-demo-2026",
+        "openclaw agent -m 你好 --json",
+        "openclaw agent -m 你好 --json --local",
+        "openclaw agent -m 你好 --json --token butler-demo-2026",
     ]:
         try:
-            r = subprocess.run(cmd.split(), capture_output=True, text=True, timeout=20, cwd="/app")
+            r = subprocess.run(cmd.split(), capture_output=True, text=True, timeout=30, cwd="/app")
             results[cmd[:50]] = {"stdout": r.stdout[:500], "stderr": r.stderr[:300], "code": r.returncode}
         except subprocess.TimeoutExpired:
             results[cmd[:50]] = {"error": "timeout"}
