@@ -475,89 +475,60 @@ def chat_direct_deepseek(message: str, user_id: str) -> str:
 
         MAX_ROUNDS = 8
         final_reply = ""
+        tool_results_collected = []
 
         for round_num in range(MAX_ROUNDS):
             response = client.chat.completions.create(
-                model="deepseek-chat",
-                messages=messages,
-                tools=TOOLS,
-                tool_choice="auto",
-                temperature=0.7,
-                max_tokens=1500,
-                timeout=30,
+                model="deepseek-chat", messages=messages, tools=TOOLS,
+                tool_choice="auto", temperature=0.7, max_tokens=1500, timeout=30,
             )
-
             choice = response.choices[0]
             msg = choice.message
-
-            # 收集工具调用
             tool_calls_to_execute = []
             if msg.tool_calls:
                 for tc in msg.tool_calls:
-                    try:
-                        args = json.loads(tc.function.arguments)
-                    except:
-                        args = {}
+                    try: args = json.loads(tc.function.arguments)
+                    except: args = {}
                     tool_calls_to_execute.append((tc.id, tc.function.name, args))
-
-            # 如果没有工具调用 → LLM 认为完成了，直接取回复
             if not tool_calls_to_execute:
-                # 文本工具调用检测（兜底）
                 if msg.content:
                     text_tools = _parse_text_tools(msg.content)
-                    if text_tools:
-                        for tt in text_tools:
-                            tool_calls_to_execute.append((f"text_{tt[0]}", tt[0], tt[1]))
-
+                    for tt in text_tools:
+                        tool_calls_to_execute.append((f"text_{tt[0]}", tt[0], tt[1]))
                 if not tool_calls_to_execute:
                     final_reply = _clean_reply(msg.content or "")
-                    if final_reply and len(final_reply) > 3:
-                        break  # LLM 认为任务完成
-                    else:
-                        final_reply = "收到，让我想想..."
-                        break
-
-            # 有工具调用 → 执行并继续循环
-            thinking = msg.content or ""
-            has_thinking = any(kw in thinking for kw in [
-                "我先", "帮你调", "帮你查", "让我", "先看看", "好的，",
-                "扩大范围", "未找到", "让我再", "等一下",
-                "先查", "先帮", "看看"
-            ])
-            clean_content = _clean_reply(thinking) if thinking and not has_thinking else None
+                    if final_reply and len(final_reply) > 3: break
+                    else: final_reply = "收到，让我想想..."; break
+            # 执行工具（中间文字不保留）
+            has_thinking = any(kw in (msg.content or "") for kw in [
+                "我先","帮你调","帮你查","让我","先看看","好的，",
+                "扩大范围","未找到","让我再","等一下","先查","先帮","看看"])
             assistant_msg = {"role": "assistant"}
-            if clean_content:
-                assistant_msg["content"] = clean_content
-            # 不传 null content——当有 tool_calls 时省略 content 字段
+            if not has_thinking and msg.content:
+                assistant_msg["content"] = _clean_reply(msg.content)
             if msg.tool_calls:
-                assistant_msg["tool_calls"] = [
-                    {"id": tc.id, "type": "function",
-                     "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
-                    for tc in msg.tool_calls
-                ]
+                assistant_msg["tool_calls"] = [{"id": tc.id, "type": "function",
+                    "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
+                    for tc in msg.tool_calls]
             messages.append(assistant_msg)
-
-            # 执行工具
             for tc_id, tc_name, tc_args in tool_calls_to_execute:
                 tool_result = execute_tool(tc_name, tc_args)
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": tc_id,
-                    "content": tool_result
-                })
+                messages.append({"role": "tool", "tool_call_id": tc_id, "content": tool_result})
+                tool_results_collected.append(f"\n[{tc_name}]: {tool_result[:300]}")
 
-        # 如果循环结束还没有 final_reply，最后一轮生成
+        # 用干净上下文生成最终回复（避免中间泄露污染）
         if not final_reply:
+            clean_msgs = [{"role": "system", "content": build_system_prompt(user_id)}]
+            clean_msgs.append({"role": "user", "content": message})
+            if tool_results_collected:
+                clean_msgs.append({"role": "user", "content": "工具执行结果：\n" + "\n".join(tool_results_collected[-8:]) + "\n\n请基于以上数据，严格按输出模板生成最终回复。"})
             response_final = client.chat.completions.create(
-                model="deepseek-chat",
-                messages=messages,
-                temperature=0.7,
-                max_tokens=1500,
-                timeout=30,
+                model="deepseek-chat", messages=clean_msgs, temperature=0.7,
+                max_tokens=1500, timeout=30,
             )
             final_reply = _clean_reply(response_final.choices[0].message.content or "")
 
-        # 保存历史
+        ## 保存历史
         hist = CHAT_HISTORY.setdefault(user_id, [])
         hist.append({"role": "user", "content": message})
         hist.append({"role": "assistant", "content": final_reply})
