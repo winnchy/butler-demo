@@ -20,13 +20,16 @@ openclaw config set gateway.mode local 2>/dev/null || true
 # 工作区 (butler 文件)
 openclaw config set workspace /app/butler 2>/dev/null || true
 
-# Gateway 默认用 openai/gpt-5.5 → 把 openai provider 指向 DeepSeek + 模型改为 deepseek-chat
+# Gateway 默认 openai/gpt-5.5 → 指向 DeepSeek
 OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://api.deepseek.com/v1}"
 if [ -n "$OPENAI_API_KEY" ]; then
     openclaw config set auth.openai.apiKey "${OPENAI_API_KEY}" 2>/dev/null || true
     openclaw config set auth.openai.baseUrl "${OPENAI_BASE_URL}" 2>/dev/null || true
+    # 尝试多种方式覆盖模型
     openclaw config set models.default "openai/deepseek-chat" 2>/dev/null || true
-    echo "[OK] OpenAI→DeepSeek (${OPENAI_BASE_URL}) model=deepseek-chat"
+    export OPENCLAW_MODEL="openai/deepseek-chat"
+    export OPENAI_MODEL="deepseek-chat"
+    echo "[OK] OpenAI→DeepSeek (${OPENAI_BASE_URL})"
 else
     echo "[WARN] OPENAI_API_KEY not set"
 fi
