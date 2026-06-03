@@ -161,6 +161,7 @@ def build_system_prompt(user_id: str) -> str:
     tone = USER_TONES.get(user_id, "")
     if tone:
         parts.append(tone)
+    parts.append(f"当前user_id={user_id}（所有工具调用必须使用此ID）")
 
     # ===== 3. 实时数据 =====
     ctx = []
@@ -258,7 +259,7 @@ def execute_tool(name: str, args: dict) -> str:
             }, timeout=10)
             recs = r.json().get("recommendations", [])[:3]
             if not recs:
-                return "未找到匹配餐厅"
+                return "API返回0条推荐(可能参数过严，请放宽条件重试)"
             lines = []
             for rec in recs:
                 lines.append(f"🍽️ {rec['name']} | {rec['cuisine']} | ⭐{rec['rating']} | ¥{rec['avg_price']}/人 | {rec.get('status','')} | {', '.join(rec.get('match_reasons',[])[:2])}")
