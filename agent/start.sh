@@ -20,19 +20,21 @@ openclaw config set gateway.mode local 2>/dev/null || true
 # 工作区 (butler 文件)
 openclaw config set workspace /app/butler 2>/dev/null || true
 
-# DeepSeek 模型配置
-openclaw config set models.default "deepseek/deepseek-chat" 2>/dev/null || true
-
-# DeepSeek API 配置 (OpenAI 兼容)
+# DeepSeek 作为 OpenAI 兼容 provider 配置
+OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://api.deepseek.com/v1}"
 if [ -n "$OPENAI_API_KEY" ]; then
-    openclaw config set auth.deepseek.apiKey "${OPENAI_API_KEY}" 2>/dev/null || true
-    echo "[OK] DeepSeek API Key configured"
+    # 方案1: 注册 deepseek provider
+    openclaw config set providers.deepseek.baseUrl "${OPENAI_BASE_URL}" 2>/dev/null || true
+    openclaw config set providers.deepseek.apiKey "${OPENAI_API_KEY}" 2>/dev/null || true
+    openclaw config set providers.deepseek.api "openai-completions" 2>/dev/null || true
+    # 方案2: 覆盖默认 openai provider 指向 DeepSeek
+    openclaw config set providers.openai.baseUrl "${OPENAI_BASE_URL}" 2>/dev/null || true
+    openclaw config set providers.openai.apiKey "${OPENAI_API_KEY}" 2>/dev/null || true
+    # 设置默认模型
+    openclaw config set models.default "deepseek/deepseek-chat" 2>/dev/null || true
+    echo "[OK] DeepSeek configured as provider (deepseek + openai override)"
 else
-    echo "[WARN] OPENAI_API_KEY not set — LLM calls will fail"
-fi
-
-if [ -n "$OPENAI_BASE_URL" ]; then
-    openclaw config set auth.deepseek.baseUrl "${OPENAI_BASE_URL}" 2>/dev/null || true
+    echo "[WARN] OPENAI_API_KEY not set"
 fi
 
 echo ""
