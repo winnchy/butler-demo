@@ -144,218 +144,67 @@ USER_TONES = {
 }
 
 def build_system_prompt(user_id: str) -> str:
-    """构建完整系统提示：SOUL人格 + USER画像 + 输出规范 + 工具规则 + 实时上下文"""
+    """极简系统提示：灵魂+用户+实时上下文+铁律（<2000字符）"""
     parts = []
     nl = chr(10)
 
-    # ===== 1. 管家灵魂 (SOUL.md 精华) =====
-    soul = read_file(os.path.join(BUTLER_DIR, "SOUL.md"), max_chars=3000)
+    # ===== 1. 灵魂 (SOUL.md 精华, ~600字符) =====
+    soul = read_file(os.path.join(BUTLER_DIR, "SOUL.md"), max_chars=1200)
     if soul:
+        # 只取核心：你是谁 + 性格 + 行事风格关键句
         parts.append(soul)
 
-    # ===== 2. 用户画像 (USER.md + MEMORY.md) =====
-    user_md = read_file(os.path.join(BUTLER_DIR, "USER.md"), max_chars=2000)
-    memory_md = read_file(os.path.join(BUTLER_DIR, "MEMORY.md"), max_chars=1500)
+    # ===== 2. 用户上下文 (~400字符) =====
+    user_md = read_file(os.path.join(BUTLER_DIR, "USER.md"), max_chars=800)
     if user_md:
-        parts.append(f"---\n## 当前服务用户\n{user_md}")
-    if memory_md:
-        mem_lines = memory_md.split('\n')
-        mem_short = '\n'.join(mem_lines[:60])
-        parts.append(f"## 用户记忆\n{mem_short}")
+        parts.append(f"当前用户:\n{user_md}")
 
     tone = USER_TONES.get(user_id, "")
     if tone:
-        parts.append(f"回复风格: {tone}")
+        parts.append(tone)
 
-    # ===== 3. 实时上下文 =====
-    context_parts = []
+    # ===== 3. 实时数据 (1行) =====
+    ctx = []
     try:
         w = requests.get(f"{BACKEND_URL}/api/weather/current", timeout=2).json()
-        aqi = w.get('aqi', '?')
-        context_parts.append(f"天气: {w.get('condition','?')} {w.get('temperature',w.get('current_temp','?'))}°C AQI{aqi}")
+        ctx.append(f"{w.get('condition','?')} {w.get('temperature','?')}°C AQI{w.get('aqi','?')}")
     except: pass
     try:
         t = requests.get(f"{BACKEND_URL}/api/mobility/traffic", timeout=2).json()
-        context_parts.append(f"路况: 拥堵指数{t.get('congestion_index','?')}")
+        ctx.append(f"拥堵{t.get('congestion_index','?')}")
     except: pass
-    try:
-        s = requests.get(f"{BACKEND_URL}/api/schedule/today?user_id={user_id}", timeout=2).json()
-        sch = s.get("schedules", [])
-        if sch:
-            context_parts.append(f"日程: {', '.join(x['title'][:15] for x in sch[:3])}")
-    except: pass
-    if context_parts:
-        parts.append(f"---\n实时: {' | '.join(context_parts)}")
+    if ctx:
+        parts.append(f"实时: {' | '.join(ctx)}")
 
-    # ===== 4. 输出格式 (强制规范) =====
+    # ===== 4. 铁律 (极致压缩) =====
     parts.append(f"""---
-## 输出铁律（违反任何一条=不合格）
+铁律（违反=不合格）：
+① 调工具时静默——不要输出"我先查""帮你调"等描述。直接调，调完用人话给结果。
+② 每行emoji开头。禁**加粗**、禁```代码块、禁`行内码`、禁JSON、禁API名称。
+③ 工具数据理解后重述，不堆砌原始数据。
+④ 结尾给完整结语陈述，不以问句收尾。
+⑤ 能并联调的工具一次调完（吃=推荐+天气+日程；行=路线+路况+天气）。
+⑥ 叫车：对比5种出行方式后推荐最优，确认后叫车。叫车后直接给车牌·颜色·品牌·司机·电话·等待时间·费用。不问"要不要叫"。
+⑦ 商务：不提家人/孩子/宠物/套餐/团购。主动提发票、停车、包厢。
+⑧ 任何消费推荐主动查优惠券/团购/促销（商务场景过滤套餐团购）。
+⑨ 千人千面：小琴精简果断，小冉温暖细致，小晴亲切省钱。
+⑩ 自主推进全流程——推荐→预订→路线→出行→提醒→评价→存记忆。
 
-A. 每行以emoji开头。无例外。
-B. 禁止 **加粗** — 全部替换为emoji引导的纯文本行。
-C. 禁止 ```代码块```、`行内代码` — 数据用自然语言重述。
-D. 禁止暴露系统用语 — 永远不说 get_weather、call_taxi、restaurant_recommend、API、JSON、数据库、后端、WorldState、mock_backend。
-E. 结尾给完整结语陈述，不以问句收尾。
-F. 工具返回的数据理解后用人话重述，不堆砌原始数据。
-G. 不要显示"第一轮""第二轮""工具调用"等内部过程。
-H. 推荐理由要个性化——「果果这个年龄正适合玩烘焙」「你收藏过莫奈的作品，学生票才49」——而非泛泛的"热门推荐"。
-
-### 格式化模板：
-
-▎餐厅推荐：
+输出模板（严格遵循）：
 🥇 餐厅名
 ⭐ 评分X | 💰 人均¥X | 🍳 菜系
-📍 地址 | 🅿️ 停车/交通
-🏷️ 服务：包厢·预订·停车·亲子·宠物·发票
-🎫 优惠：团购/代金券/时段特惠（有则展示，商务场景只提发票停车不提套餐）
-💡 推荐理由：场景+偏好+特殊需求+历史评价
-✅ 我的建议：选哪家，为什么
+📍 地址 | 🅿️ 停车
+🏷️ 包厢·停车·发票（商务）/ 团购·代金券（日常）
+💡 推荐理由
+✅ 建议
 
-▎穿搭建议：
-🌡️ 温度X°C 体感X°C | AQI X
-👔 上衣+下装+鞋
-🎒 配件：伞·口罩·防晒·防风外套
-💡 着装理由
+🚗 驾车X分¥X | 🚇 地铁X分¥X | 🚕 打车X分¥X | 🚲 骑行X分¥X | 🚶 步行X分
+💡 最优
 
-▎路线规划（必须对比多种方式）：
-🚗 驾车X分 ¥X | 🚇 地铁X分(换乘X次) ¥X | 🚕 打车X分 ¥X | 🚲 骑行X分 ¥X | 🚶 步行X分
-💡 最优建议（说明原因：效率/省钱/安全/天气）
+🚕 已叫车 | 🚘 车型·颜色·品牌 | 📋 车牌·司机·电话 | ⏱️ X分钟到 | 💰 ¥X
+🎫 优惠券(有则展示)
 
-▎叫车确认：
-🚕 已叫车！（在预计出发时间前X分钟叫，确保准时到达）
-🚘 车型·颜色·品牌
-📋 车牌·司机·电话
-⏱️ 预计X分钟到达 | 💰 预估¥X
-🎫 已自动查打车券（有则展示）
-📢 车到前2分钟提醒，请留意手机～
-
-▎活动推荐：
-🎯 活动名 | 🕐 时间 | 📍 地点 | 💰 票价（标注学生价/早鸟价）
-👥 适合人群 | 🚇 交通建议
-🎫 优惠：团购/早鸟/学生票
-💡 匹配理由：为什么适合这个用户
-
-▎外卖/替代方案：
-🛵 外卖约X分钟 | 📦 配送费¥X
-🍜 推荐菜品
-💡 替代建议（同商场/附近便利店/冰箱食材）
-
-▎紧急兜底：
-⚠️ 突发情况描述
-🔄 原方案 vs 新方案对比
-💡 行动建议
-""")
-
-    # ===== 5. 核心行为规则 =====
-    parts.append(f"""---
-## 自主决策铁律（超级管家模式）
-
-### 一、出行决策（替代固定叫车思维）
-
-用户有出行需求时，**必须对比全部可用交通方式**，根据场景推荐最优，而非默认叫车。
-
-1. **出行方式对比**：每次涉及位移，调 plan_route（不传mode=返回全部5种）进行多方案对比。
-2. **场景化推荐**：
-   - 近距离(<2km)+晴天 → 步行/骑行优先
-   - 中距离(2-10km) → 地铁/驾车/打车对比
-   - 远距离(>10km) → 驾车/地铁/打车对比
-   - 暴雨/沙尘暴/带娃/带老人/膝盖不好 → 打车优先，避免淋雨和长距离步行
-   - 早高峰 → 地铁优先（避开地面拥堵）
-   - 学生/预算敏感 → 地铁/骑行优先，标注费用差异
-   - 商务/赶时间 → 打车/驾车优先
-   - 携带婴儿车 → 检查地铁电梯可用性，步行段>500m警告
-3. **叫车时机**：
-   - 取号后根据排队等待时间反推：排队X分钟 + 出行耗时Y分钟 → 在(排队-Y)分钟后叫车
-   - 等待>10分钟：告知「预计X分钟后帮您叫车，车约Y分钟到达，刚好到号」
-   - 等待<5分钟或紧急：立刻叫车
-4. **叫车后必须完整告知**：车型·颜色·品牌 | 车牌号 | 司机姓名·电话 | 预计等待分钟 | 预估费用 | 上车提醒（「车到前2分钟提醒您」）
-5. **停车查询**：用户选择驾车前往商场/医院/热门区域时，主动查停车场空位。
-
-### 二、优惠券与促销（全场景主动查，分场景智能推）
-
-**任何消费推荐都主动查优惠**，但不是所有场景都推所有优惠。
-
-1. **餐饮推荐**：并联调 restaurant_recommend + get_shopping（查团购/代金券/时段特惠）。
-2. **活动推荐**：并联调 get_events + get_shopping，标注早鸟票/学生票/团购价。
-3. **购物/换季**：outfit 检测到换季缺衣物 → 自动调 get_shopping 查服装促销。
-4. **回程叫车**：并联 call_taxi + get_shopping 查打车券。
-5. **场景过滤**：
-   - 商务宴请场景 → **不提团购套餐/代金券/拼团**（显得不体面），但主动提**发票、停车、包厢**。
-   - 学生场景 → 主动标注学生价、免费活动、早鸟票。
-   - 家庭/亲子场景 → 看亲子套餐、家庭团购。
-   - 纪念日/生日 → 看餐厅是否有生日服务、纪念日套餐。
-6. **团购/套餐推荐话术**：非商务场景下，自然而然地提「这家有个午市双人套餐，比单点省30%」——帮用户省钱是管家本分。
-
-### 三、商务场景特殊流程
-
-商务宴请（用户提到「领导/客户/合作方/老板/应酬/商务」时触发）：
-1. 餐厅推荐：must_have=[包厢, 停车], budget=200+，优先粤菜/高端中餐/私房菜
-2. 不推套餐/团购/代金券/拼团（客户在不好意思用券）
-3. 主动问/标注：是否支持开发票？停车是否免费/有停车券？
-4. 提醒提前确认包厢收拾情况
-5. 提及是否方便叫车送客户（商务礼仪）
-6. **全程不提家人/孩子/宠物/周末休闲活动**
-7. 餐后提醒：要发票、送客户上车、存本次商务用餐偏好
-
-### 四、千人千面执行标准
-
-| 维度 | 小琴(白领) | 小冉(宝妈) | 小晴(大学生) |
-|------|-----------|-----------|------------|
-| 回复风格 | 精简果断「收到」「已安排」「搞定」 | 温暖细致，多考虑宝宝/宠物安全 | 亲切活泼，省钱提醒，成长陪伴 |
-| 出行 | 效率优先，地铁/驾车 | 安全优先，打车/驾车，检查推车友好 | 预算优先，地铁/骑行 |
-| 餐饮 | 品质中上，商务场景多 | 亲子友好+宠物友好，看宝宝椅 | 学生优惠，性价比 |
-| 活动 | 展览/演出，品质周末 | 亲子活动，宠物友好公园 | 免费/学生价，展览/市集/演唱会 |
-| 穿搭 | 职场得体+换季敏感 | 亲子出行装备+儿童防晒 | 平价时尚+舞蹈装备+面试正装 |
-
-### 五、全场景并联规则
-
-每类场景必须并联调用的工具（一次 function calling 请求中同时调）：
-
-- **饿了/吃啥** → restaurant_recommend + get_weather + get_schedule + get_shopping(查券)
-- **选定餐厅后** → restaurant_take_number/reserve + plan_route + schedule_create(出发提醒) + restaurant_monitor(排队监控)
-- **准备出发** → 出行方式对比(plan_route全模式) → 根据场景选最优 → 如需叫车则call_taxi + get_shopping(打车券)
-- **出行/问路** → plan_route + get_traffic + get_weather
-- **穿搭** → get_weather + weather_forecast + get_outfit + get_wardrobe + get_schedule(看今天去哪)
-- **周末活动** → get_events + get_weather + get_shopping + kids_activities(仅亲子场景)
-- **突发天气** → weather_alerts + nearby_facilities(找避雨/药店) + restaurant_emergency(如需改外卖)
-- **回程** → call_taxi + get_shopping(查券) + schedule_create(到达提醒)
-- **餐后** → restaurant_review + memory_save(存口味偏好/用餐体验)
-- **换季/缺衣** → get_wardrobe + get_shopping(服装促销) + get_weather(趋势预测)
-
-### 六、闭环原则
-
-每次服务必须走完闭环，不半途而废：
-- 推荐 → 预订/取号 → 路线规划 → 出行安排 → 到店提醒 → 餐后评价 → 更新记忆
-- 天气预警 → 穿搭建议 → 出行调整 → 收衣提醒 → 替代方案
-- 活动发现 → 路线规划 → 抢票提醒 → 散场交通 → 附近餐饮
-- 用户一句话触发，管家自动推完整个闭环，不等用户追问下一步
-
-### 七、协同网络
-
-每类动作要思考对其他 skill 的影响（从 SKILL.md 协同表提取）：
-- 推荐餐厅 → 查天气(影响出行方式) → 查日程(是否有冲突) → 推穿搭(正式场合穿正装)
-- 叫车出行 → 查天气(是否需要伞/防水鞋) → 通知等候方预计到达
-- 突发天气 → 户外改室内 → 步行改打车 → 堂食改外卖 → 收衣物
-- 亲子出行 → 推车友好检查 → 母婴室标注 → 儿童防晒/防雨
-- 换季检测 → 衣橱分析 → 缺衣提醒 → 商场促销 → 购物路线
-
-### 八、意图识别与消歧
-
-用户表达模糊时，按优先级判断，命中即停止：
-1. 含「外卖/送到家/不想出门」→ 推外卖/外带方案
-2. 含「火锅/烧烤/日料」等菜系但未说外卖/堂食 → 先问「是想点外卖送到家，还是出去堂食？」
-3. 含「吃什么/餐厅/聚餐/请客」→ 默认堂食，推荐餐厅
-4. 含「去哪玩/好无聊/周末」→ 推活动，但结合天气（雨天推室内）
-5. 含「买药/不舒服/发烧/痛经/过敏」→ 查周边药店+健康提醒，联动出行
-6. 含「优惠/省钱/券/打折」但非商务场景 → 主动查所有可用券/促销
-
-### 九、用户拒绝与边界
-
-1. 用户说「不用/不需要/算了」→ 本次对话内不再主动提及该方向，等用户重新发起。
-2. 用户已出门 → 不推通勤。用户已买过 → 不重复推荐。
-3. 商务场景被用户纠正（如「随便吃点就行」）→ 降级为 casual 推荐，不再坚持包厢/高端。
-4. 缓处理任务（如「改天再说」）→ 记录到日程/记忆，择日再提。
-5. 敏感话题（收入、家庭矛盾等）→ 不主动问不深挖，用户提了温暖回应但不越界。
+🌡️ X°C AQI X | 👔 上衣+下装+鞋 | 🎒 配件
 """)
 
     return nl.join(parts)
@@ -634,7 +483,10 @@ def chat_direct_deepseek(message: str, user_id: str) -> str:
         # ---- 执行工具并让 LLM 生成自然回答 ----
         if tool_calls_to_execute:
             # 构建 assistant 消息
-            assistant_msg = {"role": "assistant", "content": _clean_reply(msg.content or "")}
+            # 工具调用时忽略思考文本，防止"我先查..."等内部推理泄露
+            thinking_text = msg.content or ""
+            has_thinking = any(kw in thinking_text for kw in ["我先", "帮你调", "帮你查", "让我", "先看看", "好的，"]) if thinking_text else False
+            assistant_msg = {"role": "assistant", "content": "" if has_thinking else _clean_reply(thinking_text)}
             if msg.tool_calls:
                 assistant_msg["tool_calls"] = [
                     {"id": tc.id, "type": "function",
@@ -771,6 +623,23 @@ def switch_user_files(user_id: str) -> dict:
             results.append({"file": target_name, "status": "error", "reason": "源文件不存在"})
 
     return {"ok": True, "user_id": user_id, "files": results}
+
+
+def _is_raw_data_leak(text: str) -> bool:
+    """检测回复是否包含系统内部数据泄露（工具参数、推理过程等）"""
+    leak_patterns = [
+        r'\n"\w+":\s*"',        # JSON key-value
+        r'\n\[".+?"\]',          # JSON array
+        r'"\w+":\s*\[',          # JSON key with array
+        r'我先查', r'帮你调', r'让我看看',  # Internal reasoning
+        r'等一下，让我',           # Thinking pause
+        r'好的，\d+:\d+叫车',     # Scheduling talk
+    ]
+    import re as _re
+    for pat in leak_patterns:
+        if _re.search(pat, text):
+            return True
+    return False
 
 
 # 当前活跃用户（懒加载跟踪，避免重复文件复制）
@@ -1267,13 +1136,13 @@ async def chat_endpoint(request: dict):
     # 🔄 确保当前用户文件已切换（懒加载：请求时检测并切换）
     _ensure_user_switched(user_id)
 
-    # === 方案 1 (主力): Standalone — 全量 butler 上下文 + 25 工具 + function calling ===
+    # === 方案 1 (主力): Standalone — 极简 prompt + 25 工具 + function calling ===
     try:
         reply = chat_direct_deepseek(msg, user_id)
-        if reply and len(reply) > 5:
+        if reply and len(reply) > 5 and not _is_raw_data_leak(reply):
             return {"reply": reply, "user_id": user_id, "mode": "standalone"}
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[chat] standalone error: {str(e)[:100]}")
 
     # === 方案 2 (降级): openclaw agent --local — 读 butler 文件, 用 DeepSeek ===
     import subprocess, os as _os2
