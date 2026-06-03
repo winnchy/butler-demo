@@ -473,7 +473,7 @@ def chat_direct_deepseek(message: str, user_id: str) -> str:
             {"role": "user", "content": message}
         ]
 
-        MAX_ROUNDS = 5
+        MAX_ROUNDS = 8
         final_reply = ""
 
         for round_num in range(MAX_ROUNDS):
@@ -483,8 +483,8 @@ def chat_direct_deepseek(message: str, user_id: str) -> str:
                 tools=TOOLS,
                 tool_choice="auto",
                 temperature=0.7,
-                max_tokens=800,
-                timeout=25,
+                max_tokens=1500,
+                timeout=30,
             )
 
             choice = response.choices[0]
@@ -552,8 +552,8 @@ def chat_direct_deepseek(message: str, user_id: str) -> str:
                 model="deepseek-chat",
                 messages=messages,
                 temperature=0.7,
-                max_tokens=800,
-                timeout=20,
+                max_tokens=1500,
+                timeout=30,
             )
             final_reply = _clean_reply(response_final.choices[0].message.content or "")
 
