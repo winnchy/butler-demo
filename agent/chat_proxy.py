@@ -144,18 +144,17 @@ USER_TONES = {
 }
 
 def build_system_prompt(user_id: str) -> str:
-    """极简系统提示：灵魂+用户+实时上下文+铁律（<2000字符）"""
+    """系统提示：SOUL灵魂 + USER画像 + 实时数据 + 输出模板 + 5条铁律"""
     parts = []
     nl = chr(10)
 
-    # ===== 1. 灵魂 (SOUL.md 精华, ~600字符) =====
-    soul = read_file(os.path.join(BUTLER_DIR, "SOUL.md"), max_chars=1200)
+    # ===== 1. 管家灵魂 =====
+    soul = read_file(os.path.join(BUTLER_DIR, "SOUL.md"), max_chars=1500)
     if soul:
-        # 只取核心：你是谁 + 性格 + 行事风格关键句
         parts.append(soul)
 
-    # ===== 2. 用户上下文 (~400字符) =====
-    user_md = read_file(os.path.join(BUTLER_DIR, "USER.md"), max_chars=800)
+    # ===== 2. 用户画像 =====
+    user_md = read_file(os.path.join(BUTLER_DIR, "USER.md"), max_chars=1000)
     if user_md:
         parts.append(f"当前用户:\n{user_md}")
 
@@ -163,7 +162,7 @@ def build_system_prompt(user_id: str) -> str:
     if tone:
         parts.append(tone)
 
-    # ===== 3. 实时数据 (1行) =====
+    # ===== 3. 实时数据 =====
     ctx = []
     try:
         w = requests.get(f"{BACKEND_URL}/api/weather/current", timeout=2).json()
@@ -171,40 +170,51 @@ def build_system_prompt(user_id: str) -> str:
     except: pass
     try:
         t = requests.get(f"{BACKEND_URL}/api/mobility/traffic", timeout=2).json()
-        ctx.append(f"拥堵{t.get('congestion_index','?')}")
+        ctx.append(f"拥堵指数{t.get('congestion_index','?')}")
     except: pass
     if ctx:
         parts.append(f"实时: {' | '.join(ctx)}")
 
-    # ===== 4. 铁律 (极致压缩) =====
+    # ===== 4. 铁律（5条，违反=不合格）=====
     parts.append(f"""---
-铁律（违反=不合格）：
-① 调工具时静默——不要输出"我先查""帮你调"等描述。直接调，调完用人话给结果。
-② 每行emoji开头。禁**加粗**、禁```代码块、禁`行内码`、禁JSON、禁API名称。
-③ 工具数据理解后重述，不堆砌原始数据。
-④ 结尾给完整结语陈述，不以问句收尾。
-⑤ 能并联调的工具一次调完（吃=推荐+天气+日程；行=路线+路况+天气）。
-⑥ 叫车：对比5种出行方式后推荐最优，确认后叫车。叫车后直接给车牌·颜色·品牌·司机·电话·等待时间·费用。不问"要不要叫"。
-⑦ 商务：不提家人/孩子/宠物/套餐/团购。主动提发票、停车、包厢。
-⑧ 任何消费推荐主动查优惠券/团购/促销（商务场景过滤套餐团购）。
-⑨ 千人千面：小琴精简果断，小冉温暖细致，小晴亲切省钱。
-⑩ 自主推进全流程——推荐→预订→路线→出行→提醒→评价→存记忆。
+铁律:
+① 调工具时保持静默。不要输出任何描述性文字——禁止"我先查""帮你调""让我看看""好的，X点叫车"等。直接调工具，拿到结果后用人话呈现。
+② 每行以emoji开头。禁止**文字**格式——用emoji替代加粗。禁止```代码块。禁止JSON。禁止API名称(get_weather/call_taxi等)。
+③ 结尾给完整结语陈述，不以任何问句收尾。不说"要不要""需不需要""还有什么"等。
+④ 能并联的工具一次调完，不逐个串行。吃=restaurant_recommend+get_weather+get_schedule并联。行=plan_route+get_traffic+get_weather并联。
+⑤ 商务宴请不提家人/孩子/宠物/套餐/团购。但主动提发票、停车、包厢。主动查优惠时，商务场景过滤团购套餐只保留停车/发票相关信息。
 
-输出模板（严格遵循）：
+千人千面: 小琴精简果断，小冉温暖细致，小晴亲切省钱。
+自主推进: 推荐→预订→路线→出行→提醒→评价→存记忆，不等用户追问。
+
+----
+输出格式（严格遵循以下模板，不要编造字段名）:
+
+▎推荐餐厅时:
 🥇 餐厅名
-⭐ 评分X | 💰 人均¥X | 🍳 菜系
-📍 地址 | 🅿️ 停车
-🏷️ 包厢·停车·发票（商务）/ 团购·代金券（日常）
-💡 推荐理由
-✅ 建议
+⭐ 评分X.X | 💰 人均¥X-¥X | 🍳 菜系
+📍 地址 | 🅿️ 停车情况
+🏷️ 包厢·停车·发票(商务场景) / 团购·代金券(日常场景)
+💡 推荐理由: 场景+偏好+历史+特殊需求
+✅ 我的建议: 选哪家，为什么
 
-🚗 驾车X分¥X | 🚇 地铁X分¥X | 🚕 打车X分¥X | 🚲 骑行X分¥X | 🚶 步行X分
-💡 最优
+▎推荐路线时:
+🚗 驾车X分 ¥X | 🚇 地铁X分 ¥X | 🚕 打车X分 ¥X | 🚲 骑行X分 ¥X | 🚶 步行X分
+💡 最优: 推荐方式和原因
 
-🚕 已叫车 | 🚘 车型·颜色·品牌 | 📋 车牌·司机·电话 | ⏱️ X分钟到 | 💰 ¥X
+▎叫车后:
+🚕 已叫车 | 🚘 车型·颜色·品牌 | 📋 车牌·司机·电话 | ⏱️ 预计X分钟到达 | 💰 预估¥X
 🎫 优惠券(有则展示)
 
-🌡️ X°C AQI X | 👔 上衣+下装+鞋 | 🎒 配件
+▎推荐活动时:
+🎯 活动名 | 🕐 时间 | 📍 地点 | 💰 票价 | 👥 适合人群
+💡 推荐理由
+
+▎穿搭建议:
+🌡️ X°C AQI X | 👔 上衣+下装+鞋 | 🎒 伞·口罩·防晒
+
+▎外卖/替代:
+🛵 外卖约X分钟 | 📦 配送费¥X | 🍜 推荐菜品
 """)
 
     return nl.join(parts)
