@@ -93,6 +93,10 @@ echo ""
 #    可通过 MCP bridge 调用后端工具
 # ================================================================
 echo ">>> Starting OpenClaw Gateway on port 18789..."
+# 关闭 WS 认证挑战（demo 环境）
+export OPENCLAW_AUTH_ENABLED=false
+export NODE_ENV=development
+export DISABLE_CHALLENGE=true
 openclaw gateway --port 18789 --allow-unconfigured --password butler-demo-2026 &
 OC_PID=$!
 sleep 3

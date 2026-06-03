@@ -1190,14 +1190,14 @@ async def ws_probe():
             chal = j.loads(chal_raw)
             results["challenge"] = chal
             nonce = chal.get("payload",{}).get("nonce","")
-            # 2. 尝试多种认证方式
+            # 2. 尝试多种认证方式（不同 type 值）
             auth_attempts = [
-                # HMAC-SHA256
+                # connect.response 事件格式
+                {"type":"event","event":"connect.response","payload":{"nonce":nonce,"auth":hmac.new(PASSWORD.encode(),nonce.encode(),hashlib.sha256).hexdigest()}},
+                # connect 指令格式
                 {"type":"connect","payload":{"nonce":nonce,"auth":hmac.new(PASSWORD.encode(),nonce.encode(),hashlib.sha256).hexdigest()}},
                 # 直接发密码
                 {"type":"connect","payload":{"nonce":nonce,"password":PASSWORD}},
-                # Bearer token
-                {"type":"connect","payload":{"nonce":nonce,"token":PASSWORD}},
                 # 单发 nonce
                 {"type":"connect","payload":{"nonce":nonce}},
             ]
