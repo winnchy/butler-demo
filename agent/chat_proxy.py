@@ -1190,11 +1190,19 @@ async def chat_endpoint(request: dict):
     # === 方案 1 (主力): Standalone — Agent Loop + 25 工具 ===
     try:
         reply = chat_direct_deepseek(msg, user_id)
-        if reply and len(reply) > 5 and not _is_raw_data_leak(reply):
+        leak = _is_raw_data_leak(reply) if reply else True
+        if reply and len(reply) > 5 and not leak:
             _last_chat_diag.update({"mode": "standalone", "error": None, "len": len(reply)})
             return {"reply": reply, "user_id": user_id, "mode": "standalone"}
+        elif leak and reply and len(reply) > 20:
+            # 有泄露 → 尝试用 _clean_reply 强力清洗后重试一次
+            cleaned = _clean_reply(reply)
+            if not _is_raw_data_leak(cleaned) and len(cleaned) > 10:
+                _last_chat_diag.update({"mode": "standalone_cleaned", "error": None, "len": len(cleaned)})
+                return {"reply": cleaned, "user_id": user_id, "mode": "standalone"}
+            else:
+                _last_chat_diag.update({"mode": "standalone_rejected", "error": f"leak after clean", "preview": (reply or "")[:200]})
         else:
-            leak = _is_raw_data_leak(reply) if reply else False
             _last_chat_diag.update({"mode": "standalone_rejected", "error": f"leak={leak} len={len(reply) if reply else 0}", "preview": (reply or "")[:200]})
     except Exception as e:
         _last_chat_diag.update({"mode": "standalone_error", "error": str(e)[:200]})
