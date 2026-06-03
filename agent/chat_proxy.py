@@ -136,118 +136,152 @@ def read_file(path: str, max_chars: int = 3000) -> str:
         return ""
 
 
-def build_skill_context() -> str:
-    """自动解析 butler/skills/*/SKILL.md，提取工作流关键信息（仿 OpenClaw 自动读取）"""
-    import re, glob as g
-    skills_dir = os.path.join(BUTLER_DIR, "skills")
-    parts = []
-    # 按优先级排序：核心 skill 在前
-    priority = ["dining-butler", "mobility-butler", "outfit-advisor", "city-explorer", "life-organizer"]
-    skill_dirs = [os.path.join(skills_dir, d) for d in priority if os.path.isdir(os.path.join(skills_dir, d))]
-    # 加上其他 skill
-    for d in sorted(os.listdir(skills_dir)):
-        dp = os.path.join(skills_dir, d)
-        if os.path.isdir(dp) and d not in priority:
-            skill_dirs.append(dp)
-
-    for skill_dir in skill_dirs:
-        skill_file = os.path.join(skill_dir, "SKILL.md")
-        content = read_file(skill_file, max_chars=4000)
-        if not content: continue
-        # 解析 frontmatter
-        name = os.path.basename(skill_dir)
-        desc = ""
-        fm_match = re.match(r'^---\s*\n(.*?)\n---', content, re.DOTALL)
-        if fm_match:
-            fm = fm_match.group(1)
-            for line in fm.split('\n'):
-                if line.startswith('name:'):
-                    name = line.split(':',1)[1].strip()
-                elif line.startswith('description:'):
-                    desc = line.split(':',1)[1].strip()
-
-        # 提取「触发条件」和「执行流程/API 调用」
-        triggers = ""
-        flow = ""
-        sections = re.split(r'^## ', content, flags=re.MULTILINE)
-        for sec in sections:
-            sec_title = sec.split('\n')[0].strip()
-            if '触发条件' in sec_title:
-                triggers = sec[:400]
-            if '执行流程' in sec_title or '核心 API' in sec_title or 'API 调用' in sec_title:
-                flow = sec[:600]
-
-        # 组装该 skill 的摘要
-        summary = f"### {name}"
-        if desc: summary += f" — {desc}"
-        summary += "\n"
-        if triggers:
-            # 提取触发关键词
-            trig_lines = [l.strip() for l in triggers.split('\n') if l.strip().startswith('-')][:5]
-            if trig_lines:
-                summary += "触发: " + "; ".join(t.replace('- ','')[:50] for t in trig_lines) + "\n"
-        if flow:
-            # 提取 API 调用
-            api_calls = re.findall(r'(?:GET|POST)\s+`(/api/[\w/_-]+)`', flow)
-            if api_calls:
-                summary += "API: " + ", ".join(api_calls[:8]) + "\n"
-            # 提取关键执行步骤
-            steps = re.findall(r'\*\*Step\s+\d+\*\*[：:]\s*(.+?)(?=\n|$)', flow)
-            if not steps:
-                steps = re.findall(r'^\d+\.\s+(.+)', flow, re.MULTILINE)[:6]
-            if steps:
-                summary += "流程: " + "; ".join(s[:60] for s in steps[:5]) + "\n"
-        parts.append(summary)
-
-    return "## 可用技能（自动从 SKILL.md 加载）\n" + "\n".join(parts)
-
+# ---- 用户语气模板 ----
+USER_TONES = {
+    "white_collar": "小琴是效率优先的白领，37岁，美团PM，已婚有女儿果果4岁，丈夫大刘。回复精简果断，用「收到」「已安排」「搞定」风格。",
+    "parent": "小冉是安全优先的宝妈，29岁，自由插画师，儿子乐乐1.5岁+柯基布丁。回复温暖细致，多考虑宝宝和宠物安全。",
+    "student": "小晴是预算优先的大学生，23岁，金融硕士研一，实习+秋招并行。回复亲切活泼，注意省钱提醒和成长陪伴。",
+}
 
 def build_system_prompt(user_id: str) -> str:
-    """精简系统 prompt：人格+规则+输出格式+上下文（<1500字符，防泄漏）"""
+    """构建完整系统提示：SOUL人格 + USER画像 + 输出规范 + 工具规则 + 实时上下文"""
     parts = []
     nl = chr(10)
 
-    # 人格
-    parts.append("你是全天候私人管家，温暖高效。用户一句话你自主推进全流程。千人千面：小琴效率优先，小冉安全优先，小晴预算优先。")
+    # ===== 1. 管家灵魂 (SOUL.md 精华) =====
+    soul = read_file(os.path.join(BUTLER_DIR, "SOUL.md"), max_chars=3000)
+    if soul:
+        parts.append(soul)
 
-    # 核心规则
-    parts.append("""
-工具规则：吃→restaurant_recommend+get_weather+get_schedule并联；选餐厅→restaurant_take_number+plan_route+call_taxi+schedule_create并联；出行→plan_route+get_traffic+get_weather；回程→call_taxi+get_shopping自动查券。
+    # ===== 2. 用户画像 (USER.md + MEMORY.md) =====
+    user_md = read_file(os.path.join(BUTLER_DIR, "USER.md"), max_chars=2000)
+    memory_md = read_file(os.path.join(BUTLER_DIR, "MEMORY.md"), max_chars=1500)
+    if user_md:
+        parts.append(f"---\n## 当前服务用户\n{user_md}")
+    if memory_md:
+        mem_lines = memory_md.split('\n')
+        mem_short = '\n'.join(mem_lines[:60])
+        parts.append(f"## 用户记忆\n{mem_short}")
 
-输出规范（每行emoji开头，禁**禁---禁代码）：
-推荐餐厅：
-  餐厅名
-  评分 | 人均 | 菜系
-  地址 | 停车/交通
-  商家服务：包厢·预订·停车·亲子·宠物（列出适用标签）
-  推荐理由：结合场景+偏好+特殊需求+历史评价
-  我的建议：明确推荐哪家，说明原因
-推荐活动：活动名 | 时间 | 地点 | 票价 | 适合人群 | 推荐理由
-路线：驾车X分¥X | 地铁X分¥X(换乘X次) | 打车X分¥X | 骑行X分 | 步行X分，最后给建议
-穿搭：天气温度AQI | 上衣+下装+鞋 | 配件(伞口罩防晒)
+    tone = USER_TONES.get(user_id, "")
+    if tone:
+        parts.append(f"回复风格: {tone}")
 
-行为规则：取号查天气设提醒查路况叫车查券全自动不问用户。叫车立刻调call_taxi给车牌颜色品牌电话。结尾给完整结语不挂问句。工具数据理解后重述。商务不提家人。
-""")
-
-    # 用户上下文
-    user_md = read_file(os.path.join(BUTLER_DIR, "USER.md"), max_chars=200)
-    if user_md: parts.append(f"用户: {user_md[:200]}")
+    # ===== 3. 实时上下文 =====
+    context_parts = []
     try:
         w = requests.get(f"{BACKEND_URL}/api/weather/current", timeout=2).json()
-        parts.append(f"天气: {w.get('condition','?')} {w.get('temperature',w.get('current_temp','?'))}C")
+        aqi = w.get('aqi', '?')
+        context_parts.append(f"天气: {w.get('condition','?')} {w.get('temperature',w.get('current_temp','?'))}°C AQI{aqi}")
+    except: pass
+    try:
+        t = requests.get(f"{BACKEND_URL}/api/mobility/traffic", timeout=2).json()
+        context_parts.append(f"路况: 拥堵指数{t.get('congestion_index','?')}")
     except: pass
     try:
         s = requests.get(f"{BACKEND_URL}/api/schedule/today?user_id={user_id}", timeout=2).json()
         sch = s.get("schedules", [])
-        if sch: parts.append(f"日程: {', '.join(x['title'][:10] for x in sch[:3])}")
+        if sch:
+            context_parts.append(f"日程: {', '.join(x['title'][:15] for x in sch[:3])}")
     except: pass
+    if context_parts:
+        parts.append(f"---\n实时: {' | '.join(context_parts)}")
 
-    parts.append("防线：emoji开头禁**禁---。能做直接做。叫车给车牌。回程带券。结尾不挂问句。")
+    # ===== 4. 输出格式 (强制规范) =====
+    parts.append(f"""---
+## 输出铁律（违反任何一条=不合格）
+
+A. 每行以emoji开头。无例外。
+B. 禁止 **加粗** — 全部替换为emoji引导的纯文本行。
+C. 禁止 ```代码块``` — 数据用自然语言重述。
+D. 禁止暴露系统用语 — 永远不说 get_weather、call_taxi、restaurant_recommend、API、JSON、数据库、后端。
+E. 结尾给完整结语陈述，不以问句收尾。
+F. 工具返回的数据理解后用人话重述，不堆砌原始数据。
+G. 不要显示"第一轮""第二轮""工具调用"等内部过程。
+
+### 格式化模板：
+
+▎餐厅推荐：
+🥇 餐厅名
+⭐ 评分X | 💰 人均¥X | 🍳 菜系
+📍 地址 | 🅿️ 停车/交通
+🏷️ 服务标签：包厢·预订·停车·亲子·宠物
+💡 推荐理由：场景+偏好+特殊需求
+✅ 我的建议：选哪家，为什么
+
+▎穿搭建议：
+🌡️ 温度X°C AQI X
+👔 上衣+下装+鞋
+🎒 配件：伞·口罩·防晒
+
+▎路线规划：
+🚗 驾车X分 ¥X | 🚇 地铁X分(换乘X次) | 🚕 打车X分 ¥X
+💡 最优建议
+
+▎叫车确认：
+🚕 已叫车！
+🚘 车型·颜色·品牌
+📋 车牌·司机·电话
+⏱️ 预计X分钟到达 | 💰 预估¥X
+🎫 已自动查优惠券（有则展示）
+
+▎活动推荐：
+🎯 活动名 | 🕐 时间 | 📍 地点 | 💰 票价 | 👥 适合人群
+💡 推荐理由
+
+▎外卖/替代方案：
+🛵 外卖约X分钟 | 📦 配送费¥X
+🍜 推荐菜品
+💡 替代建议
+
+### 每类场景必做的事：
+- 吃饭 → 推荐+天气+日程并联 → 选后取号+路线+叫车+提醒并联 → 吃完评价+存偏好
+- 出行 → 路线+路况+天气并联 → 自动叫车+设提醒
+- 穿搭 → 天气+AQI+衣橱并联 → 给完整搭配
+- 活动 → 活动+路线+天气并联
+- 回程 → 叫车+优惠券自动并联
+""")
+
+    # ===== 5. 核心行为规则 =====
+    parts.append(f"""---
+## 自主决策铁律（超级管家模式）
+
+1. 叫车：选好餐厅/目的地后立刻调 call_taxi，直接告知车牌·颜色·品牌·司机电话·等待时间·预估费用。不问「要不要现在叫」。
+2. 回程：自动并联 call_taxi + get_shopping 查优惠券。
+3. 取号：选定餐厅自动取号，并联查路线、叫车、设提醒。
+4. 结尾：给完整结语陈述。不以任何问句收尾。
+5. 并联：能同时调的工具绝不逐个调。
+6. 商务：商务宴请场景不提家人/孩子/宠物/周末活动。
+7. 跨skill：推荐餐厅要查天气，安排出行要查路况，回程要查券。
+8. 千人千面：小琴效率优先(精简果断)，小冉安全优先(温暖细致)，小晴预算优先(亲切省钱)。
+9. 自主推进：用户一句话触发全流程——推荐→预订→路线→叫车→提醒→评价→存记忆。
+10. 用户切换：当用户切换时，重新读取对应 USER.md，改变语气风格。
+""")
+
     return nl.join(parts)
 
 
+def build_skill_context() -> str:
+    """精简技能摘要（不重复 function descriptions）"""
+    skills_dir = os.path.join(BUTLER_DIR, "skills")
+    if not os.path.isdir(skills_dir):
+        return ""
+    import re
+    lines = []
+    priority = ["dining-butler", "mobility-butler", "outfit-advisor", "city-explorer", "life-organizer"]
+    for d in priority:
+        sf = os.path.join(skills_dir, d, "SKILL.md")
+        if os.path.isfile(sf):
+            content = read_file(sf, max_chars=800)
+            fm = re.match(r'^---\s*\n(.*?)\n---', content, re.DOTALL)
+            if fm:
+                name = d; desc = ""
+                for line in fm.group(1).split('\n'):
+                    if line.startswith('name:'): name = line.split(':',1)[1].strip()
+                    elif line.startswith('description:'): desc = line.split(':',1)[1].strip()
+                lines.append(f"{name}: {desc}")
+    return " | ".join(lines) if lines else ""
 
-# ---- 工具执行 (转发到 Service 1) ----
 
 def execute_tool(name: str, args: dict) -> str:
     """执行工具调用 → HTTP 请求到 Service 1"""
@@ -568,14 +602,26 @@ def _parse_text_tools(text: str) -> list:
 
 
 def _clean_reply(text: str) -> str:
-    """过滤 LLM 响应中的原始工具调用语法和无关内容"""
+    """过滤 LLM 响应中的工具调用语法、Markdown、代码块、JSON、系统暴露"""
     import re
-    # 去掉任何 XML/HTML 风格标签（如 <invoke>, <parameter>, <function> 等）
+    if not text:
+        return ""
+    # 去掉任何 XML/HTML 风格标签
     text = re.sub(r'<[^>]+>', '', text)
-    # 去掉残留的工具调用 JSON/代码块
+    # 去掉代码块（含语言标记）
     text = re.sub(r'```[\s\S]*?```', '', text)
+    # 去掉 Markdown 加粗
     text = text.replace('**', '')
+    # 去掉 Markdown 分隔线
     text = re.sub(r'^---+$', '', text, flags=re.MULTILINE)
+    # 去掉 Markdown 标题标记（保留文字）
+    text = re.sub(r'^#{1,6}\s+', '', text, flags=re.MULTILINE)
+    # 去掉行内代码
+    text = re.sub(r'`([^`]+)`', r'\1', text)
+    # 去掉 "第一/二/三轮" 等内部过程暴露
+    text = re.sub(r'第[一二三四五]轮[：:]?\s*', '', text)
+    text = re.sub(r'Step\s*\d+[：:]\s*', '', text)
+    # 去掉多余空行
     text = re.sub(r'\n{3,}', '\n\n', text)
     return text.strip()
 
@@ -625,6 +671,17 @@ def switch_user_files(user_id: str) -> dict:
             results.append({"file": target_name, "status": "error", "reason": "源文件不存在"})
 
     return {"ok": True, "user_id": user_id, "files": results}
+
+
+# 当前活跃用户（懒加载跟踪，避免重复文件复制）
+_current_active_user = None
+
+def _ensure_user_switched(user_id: str):
+    """确保当前请求的用户文件已加载（懒切换）"""
+    global _current_active_user
+    if _current_active_user != user_id:
+        switch_user_files(user_id)
+        _current_active_user = user_id
 
 
 # ---- H5 聊天界面 ----
@@ -1100,16 +1157,57 @@ def chat_ui():
 
 @app.post("/chat")
 async def chat_endpoint(request: dict):
-    """AI 对话端点：OpenClaw Gateway 优先 → 降级直连 DeepSeek"""
+    """AI 对话端点：Standalone(全量butler+工具) → openclaw_local(降级) → Gateway(兜底)"""
     msg = request.get("message", "").strip()
     user_id = request.get("user_id", "white_collar")
 
     if not msg:
         return {"reply": "我在听～请说。", "user_id": user_id}
 
-    mode = "unknown"
+    # 🔄 确保当前用户文件已切换（懒加载：请求时检测并切换）
+    _ensure_user_switched(user_id)
 
-    # === 方案 1: 转发到 OpenClaw Gateway ===
+    # === 方案 1 (主力): Standalone — 全量 butler 上下文 + 25 工具 + function calling ===
+    try:
+        reply = chat_direct_deepseek(msg, user_id)
+        if reply and len(reply) > 5:
+            return {"reply": reply, "user_id": user_id, "mode": "standalone"}
+    except Exception:
+        pass
+
+    # === 方案 2 (降级): openclaw agent --local — 读 butler 文件, 用 DeepSeek ===
+    import subprocess, os as _os2
+    try:
+        _os2.environ["OPENCLAW_WORKSPACE"] = BUTLER_DIR
+        _os2.environ["OPENCLAW_GATEWAY_PASSWORD"] = "butler-demo-2026"
+        r = subprocess.run(
+            ["openclaw", "agent", "-m", msg, "--json", "--agent", "main", "--local"],
+            capture_output=True, text=True, timeout=25, cwd=BUTLER_DIR
+        )
+        if r.returncode == 0 and r.stdout:
+            try:
+                data = json.loads(r.stdout)
+                payloads = data.get("payloads", [])
+                parts = []
+                for p in payloads:
+                    t = p.get("text", "")
+                    if t:
+                        parts.append(t)
+                oc_reply = "\n".join(parts)
+                if oc_reply and len(oc_reply) > 3:
+                    return {"reply": _clean_reply(oc_reply), "user_id": user_id, "mode": "openclaw_local"}
+            except json.JSONDecodeError:
+                raw = r.stdout.strip()
+                if raw and len(raw) > 3:
+                    return {"reply": _clean_reply(raw), "user_id": user_id, "mode": "openclaw_local"}
+    except subprocess.TimeoutExpired:
+        pass
+    except FileNotFoundError:
+        pass
+    except Exception:
+        pass
+
+    # === 方案 3 (兜底): OpenClaw Gateway REST ===
     gw_headers = {"Authorization": "Bearer butler-demo-2026",
                   "Content-Type": "application/json"}
     for endpoint in ["/api/v1/chat", "/api/chat", "/v1/chat/completions", "/chat"]:
@@ -1131,48 +1229,8 @@ async def chat_endpoint(request: dict):
         except Exception:
             continue
 
-    # === 方案 2: openclaw agent --local (读 butler 文件, 用 DeepSeek) ===
-    import subprocess, os as _os2
-    try:
-        _os2.environ["OPENCLAW_WORKSPACE"] = BUTLER_DIR
-        _os2.environ["OPENCLAW_GATEWAY_PASSWORD"] = "butler-demo-2026"
-        r = subprocess.run(
-            ["openclaw", "agent", "-m", msg, "--json", "--agent", "main", "--local"],
-            capture_output=True, text=True, timeout=25, cwd=BUTLER_DIR
-        )
-        if r.returncode == 0 and r.stdout:
-            try:
-                data = json.loads(r.stdout)
-                payloads = data.get("payloads", [])
-                parts = []
-                for p in payloads:
-                    t = p.get("text", "")
-                    if t:
-                        parts.append(t)
-                    # MCP 工具调用结果也可能在 payloads 中
-                    if p.get("type") == "tool_result":
-                        parts.append(p.get("content", ""))
-                oc_reply = "\n".join(parts)
-                if oc_reply and len(oc_reply) > 3:
-                    oc_reply = _clean_reply(oc_reply)
-                    return {"reply": oc_reply, "user_id": user_id, "mode": "openclaw_local"}
-            except json.JSONDecodeError:
-                # stdout 不是 JSON，检查是否是纯文本回复
-                raw = r.stdout.strip()
-                if raw and len(raw) > 3:
-                    raw = _clean_reply(raw)
-                    return {"reply": raw, "user_id": user_id, "mode": "openclaw_local"}
-    except subprocess.TimeoutExpired:
-        pass
-    except FileNotFoundError:
-        pass  # openclaw CLI 未安装
-    except Exception:
-        pass
-
-    # === 方案 3: 降级直连 DeepSeek ===
-    reply = chat_direct_deepseek(msg, user_id)
-    mode = "standalone"
-    return {"reply": reply, "user_id": user_id, "mode": mode}
+    # === 终极降级 ===
+    return {"reply": "抱歉小管暂时无法回应，请稍后再试。", "user_id": user_id, "mode": "error"}
 
 
 @app.post("/switch-user/{user_id}")
