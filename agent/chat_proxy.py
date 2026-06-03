@@ -657,6 +657,17 @@ def _clean_reply(text: str) -> str:
     text = re.sub(r'`([^`]+)`', r'\1', text)
     text = re.sub(r'第[一二三四五]轮[：:]?\s*', '', text)
     text = re.sub(r'Step\s*\d+[：:]\s*', '', text)
+    # 强力清除：裸工具参数（user_id/坐标/数字串）
+    text = re.sub(r'^white_collar\s*$', '', text, flags=re.MULTILINE)
+    text = re.sub(r'^parent\s*$', '', text, flags=re.MULTILINE)
+    text = re.sub(r'^student\s*$', '', text, flags=re.MULTILINE)
+    text = re.sub(r'^business\s*$', '', text, flags=re.MULTILINE)
+    text = re.sub(r'^family\s*$', '', text, flags=re.MULTILINE)
+    text = re.sub(r'^casual\s*$', '', text, flags=re.MULTILINE)
+    text = re.sub(r'^date\s*$', '', text, flags=re.MULTILINE)
+    text = re.sub(r'^\d{2}\.\d{4,6}\s*$', '', text, flags=re.MULTILINE)  # 坐标如 39.9959
+    text = re.sub(r'^\d{2,4}\s*$', '', text, flags=re.MULTILINE)  # 纯数字如 3000
+    text = re.sub(r'^\d{3}\.\d{4,6}\s*$', '', text, flags=re.MULTILINE)  # 坐标如 116.4721
     text = re.sub(r'\n{3,}', '\n\n', text)
     return text.strip()
 
@@ -1206,8 +1217,11 @@ async def chat_endpoint(request: dict):
     # === 方案 1 (主力): Standalone — Agent Loop + 25 工具 ===
     try:
         reply = chat_direct_deepseek(msg, user_id)
+        # 先强力清洗再检测泄露
+        if reply:
+            reply = _clean_reply(reply)
         leak = _is_raw_data_leak(reply) if reply else True
-        if reply and len(reply) > 5 and not leak:
+        if reply and len(reply) > 10 and not leak:
             _last_chat_diag.update({"mode": "standalone", "error": None, "len": len(reply)})
             return {"reply": reply, "user_id": user_id, "mode": "standalone"}
         elif leak and reply and len(reply) > 20:
