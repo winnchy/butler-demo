@@ -1226,11 +1226,14 @@ def openclaw_cli_help():
     import subprocess, json as j
     results = {}
     # 尝试通过 openclaw CLI 和 Gateway 对话
+    # 设密码环境变量
+    import os as _os
+    _os.environ["OPENCLAW_GATEWAY_PASSWORD"] = "butler-demo-2026"
     for cmd in [
-        # 走 Gateway（不带 --local），Gateway 会自动读 /app/butler
-        "openclaw agent -m 你好 --json --agent main",
-        # 带 workspace 的 local 模式
-        "openclaw agent -m 你好 --json --agent main --local --workspace /app/butler",
+        # 走 Gateway + 密码
+        "openclaw agent -m 你好 --json --agent main --password butler-demo-2026",
+        # local 模式（已验证可用）
+        "openclaw agent -m 你好 --json --agent main --local",
     ]:
         try:
             r = subprocess.run(cmd.split(), capture_output=True, text=True, timeout=30, cwd="/app")

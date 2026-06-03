@@ -97,6 +97,7 @@ echo ">>> Starting OpenClaw Gateway on port 18789..."
 export OPENCLAW_AUTH_ENABLED=false
 export NODE_ENV=development
 export DISABLE_CHALLENGE=true
+export OPENCLAW_GATEWAY_PASSWORD=butler-demo-2026
 openclaw gateway --port 18789 --allow-unconfigured --password butler-demo-2026 &
 OC_PID=$!
 sleep 3
