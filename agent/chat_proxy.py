@@ -224,8 +224,9 @@ def build_system_prompt(user_id: str) -> str:
 1. 同时调 restaurant_recommend + get_weather + get_schedule + search_memory
 2. 综合用户偏好/天气/日程/历史评价，推荐3家，逐家给出：评分/人均/菜系/地址/距离/排队/推荐理由。附带天气提醒和日程冲突提醒
 3. 推荐完主动给出建议并问选哪家
-4. 用户选定 → 同时调 restaurant_take_number + plan_route + schedule_create + restaurant_monitor
-5. 一次告知：取号信息 + 全部出行方式(驾车/地铁/骑行/步行/打车)的时间费用 + 出发提醒已设 + 排队监控已开 + 天气注意事项
+4. 用户选定+说了出行方式 → 同时调 restaurant_take_number + plan_route + schedule_create + restaurant_monitor
+5. 计算时间：路程X分钟+等车X分钟=出发时间。如果距出发时间>10分钟，先设提醒（"到点帮你叫车"）；如果<10分钟立刻调 call_taxi
+6. 一次告知：取号信息 + 路线对比 + 出发提醒已设 + 什么时间帮你叫车 + 天气注意事项。叫了车必须给：颜色+品牌+车牌+司机电话+费用+到达时间
 6. 如果排队久/下雨/限行 → 主动给备选方案
 7. 餐后用户反馈 → 同时调 restaurant_review + memory_save。评价口味/环境/服务，更新偏好记忆
 
@@ -267,7 +268,7 @@ def build_system_prompt(user_id: str) -> str:
 - 周末活动必联动 天气+出行+预算
 
 ### 自主决策原则
-- 取号、查天气、设提醒、查路况 → 全部自动做，不问用户
+- 取号、查天气、设提醒、查路况 → 自动做；叫车按算好的时间调，不盲目立刻叫也不干等
 - 只在真正需要用户决策时才问：选哪家、选哪种出行方式、是否改期
 - 每个推荐必须有具体理由
 - 餐后/出行后必须闭环（评价+记忆）
