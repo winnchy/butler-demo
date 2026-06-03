@@ -1222,15 +1222,22 @@ async def ws_probe():
 
 @app.get("/debug/openclaw-cli")
 def openclaw_cli_help():
-    """运行 openclaw --help 查看可用的 CLI 命令"""
-    import subprocess
+    """测试 openclaw agent 命令通过 Gateway 对话"""
+    import subprocess, json as j
     results = {}
-    for cmd in ["openclaw --help", "openclaw chat --help", "openclaw agent --help"]:
+    # 尝试通过 openclaw CLI 和 Gateway 对话
+    for cmd in [
+        "openclaw agent -m 你好 --json --password butler-demo-2026 --timeout-ms 15000",
+        "openclaw agent -m 你好 --json --local --timeout-ms 15000",
+        "openclaw agent -m 你好 --json --password butler-demo-2026",
+    ]:
         try:
-            r = subprocess.run(cmd.split(), capture_output=True, text=True, timeout=10)
-            results[cmd] = (r.stdout + r.stderr)[:1000]
+            r = subprocess.run(cmd.split(), capture_output=True, text=True, timeout=20, cwd="/app")
+            results[cmd[:50]] = {"stdout": r.stdout[:500], "stderr": r.stderr[:300], "code": r.returncode}
+        except subprocess.TimeoutExpired:
+            results[cmd[:50]] = {"error": "timeout"}
         except Exception as e:
-            results[cmd] = str(e)[:200]
+            results[cmd[:50]] = {"error": str(e)[:200]}
     return results
 
 
