@@ -606,6 +606,45 @@ def switch_user_files(user_id: str) -> dict:
     return {"ok": True, "user_id": user_id, "files": results}
 
 
+def _parse_text_tools(text: str) -> list:
+    """从 LLM 文本输出中解析工具调用（兼容 DeepSeek XML/JSON 格式）"""
+    import re
+    tools = []
+    pattern = r'<invoke\s+name="(\w+)"[^>]*>(.*?)</invoke>'
+    for m in re.finditer(pattern, text, re.DOTALL):
+        name = m.group(1)
+        body = m.group(2)
+        args = {}
+        for pm in re.finditer(r'<parameter\s+name="(\w+)"[^>]*>(.*?)</parameter>', body, re.DOTALL):
+            args[pm.group(1)] = pm.group(2).strip()
+        if name: tools.append((name, args))
+    json_pattern = r'\{"name"\s*:\s*"(\w+)"\s*,\s*"arguments"\s*:\s*(\{[^}]+\})\}'
+    for m in re.finditer(json_pattern, text):
+        try:
+            name = m.group(1)
+            args = json.loads(m.group(2))
+            tools.append((name, args))
+        except: pass
+    return tools
+
+
+def _clean_reply(text: str) -> str:
+    """过滤 LLM 响应中的工具调用语法、Markdown、代码块、JSON、系统暴露"""
+    import re
+    if not text:
+        return ""
+    text = re.sub(r'<[^>]+>', '', text)
+    text = re.sub(r'```[\s\S]*?```', '', text)
+    text = text.replace('**', '')
+    text = re.sub(r'^---+$', '', text, flags=re.MULTILINE)
+    text = re.sub(r'^#{1,6}\s+', '', text, flags=re.MULTILINE)
+    text = re.sub(r'`([^`]+)`', r'\1', text)
+    text = re.sub(r'第[一二三四五]轮[：:]?\s*', '', text)
+    text = re.sub(r'Step\s*\d+[：:]\s*', '', text)
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    return text.strip()
+
+
 def _is_raw_data_leak(text: str) -> bool:
     """检测回复是否包含系统内部数据泄露（工具参数、推理过程等）"""
     import re as _re
