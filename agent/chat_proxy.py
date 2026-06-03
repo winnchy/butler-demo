@@ -1220,6 +1220,20 @@ async def ws_probe():
     return {"gateway": uri, "results": results}
 
 
+@app.get("/debug/openclaw-cli")
+def openclaw_cli_help():
+    """运行 openclaw --help 查看可用的 CLI 命令"""
+    import subprocess
+    results = {}
+    for cmd in ["openclaw --help", "openclaw chat --help", "openclaw agent --help"]:
+        try:
+            r = subprocess.run(cmd.split(), capture_output=True, text=True, timeout=10)
+            results[cmd] = (r.stdout + r.stderr)[:1000]
+        except Exception as e:
+            results[cmd] = str(e)[:200]
+    return results
+
+
 @app.get("/debug/gateway")
 def debug_gateway():
     """探测 OpenClaw Gateway 暴露的所有端点"""
