@@ -1230,10 +1230,9 @@ def openclaw_cli_help():
     import os as _os
     _os.environ["OPENCLAW_GATEWAY_PASSWORD"] = "butler-demo-2026"
     for cmd in [
-        # 走 Gateway + 密码
-        "openclaw agent -m 你好 --json --agent main --password butler-demo-2026",
-        # local 模式（已验证可用）
         "openclaw agent -m 你好 --json --agent main --local",
+        "openclaw agent -m 你好 --json --agent main --token butler-demo-2026",
+        "openclaw agent -m 你好 --json --agent main",
     ]:
         try:
             r = subprocess.run(cmd.split(), capture_output=True, text=True, timeout=30, cwd="/app")

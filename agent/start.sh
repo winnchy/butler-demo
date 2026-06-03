@@ -98,6 +98,9 @@ export OPENCLAW_AUTH_ENABLED=false
 export NODE_ENV=development
 export DISABLE_CHALLENGE=true
 export OPENCLAW_GATEWAY_PASSWORD=butler-demo-2026
+# 配置 Gateway 密码供 CLI 使用
+openclaw config set gateway.auth.password butler-demo-2026 2>/dev/null || true
+openclaw config set gateway.auth.token butler-demo-2026 2>/dev/null || true
 openclaw gateway --port 18789 --allow-unconfigured --password butler-demo-2026 &
 OC_PID=$!
 sleep 3
