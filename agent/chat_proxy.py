@@ -1109,13 +1109,15 @@ async def chat_endpoint(request: dict):
 
     mode = "unknown"
 
-    # === 方案 1: 转发到 OpenClaw Gateway（多端点尝试）===
+    # === 方案 1: 转发到 OpenClaw Gateway ===
+    gw_headers = {"Authorization": "Bearer butler-demo-2026",
+                  "Content-Type": "application/json"}
     for endpoint in ["/api/v1/chat", "/api/chat", "/v1/chat/completions", "/chat"]:
         try:
             resp = requests.post(
                 f"{OPENCLAW_GATEWAY}{endpoint}",
                 json={"message": msg, "user_id": user_id},
-                timeout=5,
+                headers=gw_headers, timeout=5,
             )
             if resp.status_code == 200:
                 data = resp.json()
@@ -1125,7 +1127,7 @@ async def chat_endpoint(request: dict):
         except requests.exceptions.Timeout:
             continue
         except requests.exceptions.ConnectionError:
-            break  # Gateway 没启动，不试其他端点
+            break
         except Exception:
             continue
 
