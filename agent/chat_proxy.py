@@ -230,6 +230,12 @@ def build_system_prompt(user_id: str) -> str:
 - 不编造不存在的折扣/优惠券/套餐——只展示工具返回的真实数据
 """)
 
+    result = nl.join(parts)
+    # 安全清洗控制字符防止 JSON 序列化失败
+    import re as _safe_re
+    result = _safe_re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', result)
+    return result
+
 
 def build_skill_context() -> str:
     """精简技能摘要（不重复 function descriptions）"""
@@ -512,17 +518,17 @@ def chat_direct_deepseek(message: str, user_id: str) -> str:
                         break
 
             # 有工具调用 → 执行并继续循环
-            # 构建 assistant 消息（清空思考文字，只保留 tool_calls）
             thinking = msg.content or ""
             has_thinking = any(kw in thinking for kw in [
                 "我先", "帮你调", "帮你查", "让我", "先看看", "好的，",
                 "扩大范围", "未找到", "让我再", "等一下",
                 "先查", "先帮", "看看"
             ])
-            assistant_msg = {
-                "role": "assistant",
-                "content": "" if has_thinking else _clean_reply(thinking)
-            }
+            clean_content = _clean_reply(thinking) if thinking and not has_thinking else None
+            assistant_msg = {"role": "assistant"}
+            if clean_content:
+                assistant_msg["content"] = clean_content
+            # 不传 null content——当有 tool_calls 时省略 content 字段
             if msg.tool_calls:
                 assistant_msg["tool_calls"] = [
                     {"id": tc.id, "type": "function",
