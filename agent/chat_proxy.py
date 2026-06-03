@@ -1174,28 +1174,50 @@ def health():
 
 @app.get("/debug/ws-probe")
 async def ws_probe():
-    """从 Railway 内部探测 Gateway WebSocket 协议"""
-    import asyncio, json as j
+    """探测 Gateway WebSocket + 尝试完成认证握手"""
+    import asyncio, json as j, hmac, hashlib
     results = {}
     try:
         import websockets
     except:
-        return {"error": "websockets module not installed"}
-    for path in ["/ws", "/chat", "/websocket", "/"]:
-        uri = f"ws://localhost:18789{path}"
-        for fmt_name, msg in [("json", j.dumps({"message":"hi"})), ("event", j.dumps({"event":"user_message","content":"hi"})), ("text", "hi")]:
-            label = f"{path}/{fmt_name}"
-            try:
-                async with websockets.connect(uri, open_timeout=3) as ws:
-                    await ws.send(msg)
-                    try:
-                        resp = await asyncio.wait_for(ws.recv(), timeout=2)
-                        results[label] = {"sent": msg[:100], "received": resp[:500]}
-                    except asyncio.TimeoutError:
-                        results[label] = {"sent": msg[:100], "status": "connected but no response"}
-            except Exception as e:
-                results[label] = {"sent": msg[:100], "error": str(e)[:100]}
-    return {"gateway": "ws://localhost:18789", "results": results}
+        return {"error": "websockets not installed"}
+    PASSWORD = "butler-demo-2026"
+    uri = "ws://localhost:18789/ws"
+    try:
+        async with websockets.connect(uri, open_timeout=3) as ws:
+            # 1. 接收 challenge
+            chal_raw = await asyncio.wait_for(ws.recv(), timeout=3)
+            chal = j.loads(chal_raw)
+            results["challenge"] = chal
+            nonce = chal.get("payload",{}).get("nonce","")
+            # 2. 尝试多种认证方式
+            auth_attempts = [
+                # HMAC-SHA256
+                {"type":"connect","payload":{"nonce":nonce,"auth":hmac.new(PASSWORD.encode(),nonce.encode(),hashlib.sha256).hexdigest()}},
+                # 直接发密码
+                {"type":"connect","payload":{"nonce":nonce,"password":PASSWORD}},
+                # Bearer token
+                {"type":"connect","payload":{"nonce":nonce,"token":PASSWORD}},
+                # 单发 nonce
+                {"type":"connect","payload":{"nonce":nonce}},
+            ]
+            for i, auth in enumerate(auth_attempts):
+                await ws.send(j.dumps(auth))
+                try:
+                    resp = await asyncio.wait_for(ws.recv(), timeout=2)
+                    results[f"auth_{i}"] = {"sent": j.dumps(auth)[:200], "received": resp[:500]}
+                    if "connect" in resp and "ok" in resp.lower():
+                        results["AUTH_SUCCESS"] = f"auth method {i} worked!"
+                        # 发送测试消息
+                        await ws.send(j.dumps({"message":"hi"}))
+                        final = await asyncio.wait_for(ws.recv(), timeout=3)
+                        results["chat_test"] = final[:500]
+                        break
+                except asyncio.TimeoutError:
+                    results[f"auth_{i}"] = {"sent": j.dumps(auth)[:100], "status": "timeout"}
+    except Exception as e:
+        results["error"] = str(e)[:200]
+    return {"gateway": uri, "results": results}
 
 
 @app.get("/debug/gateway")
