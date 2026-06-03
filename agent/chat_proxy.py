@@ -1117,7 +1117,7 @@ async def chat_endpoint(request: dict):
             resp = requests.post(
                 f"{OPENCLAW_GATEWAY}{endpoint}",
                 json={"message": msg, "user_id": user_id},
-                headers=gw_headers, timeout=5,
+                headers=gw_headers, timeout=2,
             )
             if resp.status_code == 200:
                 data = resp.json()
@@ -1170,6 +1170,21 @@ def health():
         "butler_dir_exists": os.path.exists(BUTLER_DIR),
         "mode": "standalone (降级模式)" if not gw_ok else "openclaw",
     }
+
+
+@app.get("/debug/gateway")
+def debug_gateway():
+    """探测 OpenClaw Gateway 暴露的所有端点"""
+    import requests as req
+    results = {}
+    # 尝试获取 openapi.json
+    for path in ["/openapi.json", "/docs", "/redoc", "/api", "/"]:
+        try:
+            r = req.get(f"http://localhost:18789{path}", timeout=3)
+            results[path] = {"status": r.status_code, "preview": r.text[:200]}
+        except Exception as e:
+            results[path] = {"error": str(e)[:100]}
+    return {"gateway_url": "http://localhost:18789", "probes": results}
 
 
 @app.get("/debug/env")
