@@ -69,23 +69,25 @@ echo ""
 #    读取 /app/butler 下的 SOUL.md + SKILL.md + USER.md + MEMORY.md
 #    可通过 MCP bridge 调用后端工具
 # ================================================================
-echo ">>> Starting OpenClaw Gateway (port 18789)..."
-openclaw gateway --port 18789 --allow-unconfigured --password butler-demo-2026 &
+echo ">>> Starting OpenClaw (Gateway + Agent) on port 18789..."
+# 尝试 serve 模式（同时启动 Gateway + Agent Core）
+openclaw serve --port 18789 --allow-unconfigured --password butler-demo-2026 &
 OC_PID=$!
-sleep 3
+sleep 5
 
-# 验证 Gateway 是否启动
 if kill -0 $OC_PID 2>/dev/null; then
-    echo "[OK] OpenClaw Gateway started (PID $OC_PID)"
-    # 尝试 health check
-    sleep 2
-    if curl -s http://localhost:18789/health > /dev/null 2>&1; then
-        echo "[OK] OpenClaw Gateway health check passed"
-    else
-        echo "[WARN] OpenClaw Gateway health check failed (may still be initializing)"
-    fi
+    echo "[OK] OpenClaw started (PID $OC_PID)"
+    # 探测可用端点
+    for ep in /health /api/chat /v1/chat /api/v1/chat /chat; do
+        if curl -s http://localhost:18789$ep -o /dev/null -w "%{http_code}" 2>/dev/null | grep -q '200\|201\|400\|401'; then
+            echo "  Found endpoint: $ep"
+        fi
+    done
 else
-    echo "[WARN] OpenClaw Gateway failed to start — will use standalone mode"
+    echo "[WARN] openclaw serve failed, trying gateway mode..."
+    openclaw gateway --port 18789 --allow-unconfigured --password butler-demo-2026 &
+    OC_PID=$!
+    sleep 3
 fi
 echo ""
 

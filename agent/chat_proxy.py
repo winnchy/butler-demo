@@ -1109,25 +1109,25 @@ async def chat_endpoint(request: dict):
 
     mode = "unknown"
 
-    # === 方案 1: 转发到 OpenClaw Gateway ===
-    try:
-        resp = requests.post(
-            f"{OPENCLAW_GATEWAY}/api/chat",
-            json={"message": msg, "user_id": user_id},
-            timeout=5,
-        )
-        if resp.status_code == 200:
-            data = resp.json()
-            reply = data.get("reply") or data.get("response") or data.get("content", "")
-            if reply:
-                mode = "openclaw"
-                return {"reply": reply, "user_id": user_id, "mode": mode}
-    except requests.exceptions.Timeout:
-        pass  # Gateway 超时 → 降级
-    except requests.exceptions.ConnectionError:
-        pass  # Gateway 未启动 → 降级
-    except Exception:
-        pass
+    # === 方案 1: 转发到 OpenClaw Gateway（多端点尝试）===
+    for endpoint in ["/api/v1/chat", "/api/chat", "/v1/chat/completions", "/chat"]:
+        try:
+            resp = requests.post(
+                f"{OPENCLAW_GATEWAY}{endpoint}",
+                json={"message": msg, "user_id": user_id},
+                timeout=5,
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                reply = data.get("reply") or data.get("response") or data.get("content", "")
+                if reply:
+                    return {"reply": reply, "user_id": user_id, "mode": "openclaw"}
+        except requests.exceptions.Timeout:
+            continue
+        except requests.exceptions.ConnectionError:
+            break  # Gateway 没启动，不试其他端点
+        except Exception:
+            continue
 
     # === 方案 2: 降级直连 DeepSeek ===
     reply = chat_direct_deepseek(msg, user_id)
