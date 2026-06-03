@@ -1199,12 +1199,16 @@ def debug_gateway():
             results[f"POST {path}"] = {"status": r.status_code, "content_type": ct, "preview": r.text[:150]}
         except Exception as e:
             results[f"POST {path}"] = {"error": str(e)[:80]}
-        try:
-            r = req.get(f"http://localhost:18789{path}", timeout=3)
-            results[path] = {"status": r.status_code, "preview": r.text[:200]}
-        except Exception as e:
-            results[path] = {"error": str(e)[:100]}
-    return {"gateway_url": "http://localhost:18789", "probes": results}
+    # 抓 Gateway 首页 HTML 解析 JS 中的 API 端点
+    html = ""
+    try:
+        r = req.get("http://localhost:18789/", timeout=3)
+        html = r.text
+    except: pass
+    import re
+    api_hints = re.findall(r'["\x27](/[^"\x27\s]{2,40})["\x27]', html)[:20]
+    ws_hints = re.findall(r'(wss?://[^\s"\'<>]+|WebSocket\(["\'][^"\']+["\'])', html)[:5]
+    return {"gateway_url": "http://localhost:18789", "api_hints": api_hints, "ws_hints": ws_hints, "probes": results}
 
 
 @app.get("/debug/env")
