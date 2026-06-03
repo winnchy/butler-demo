@@ -82,6 +82,22 @@ MCP_PID=$!
 sleep 1
 if kill -0 $MCP_PID 2>/dev/null; then
     echo "[OK] MCP Bridge started (PID $MCP_PID)"
+    # 注册 MCP 到 OpenClaw config，让 --local 模式也能调后端工具
+    sleep 1
+    openclaw mcp add butler-backend http://localhost:18790 2>/dev/null || true
+    # 同时写入 openclaw.json 以确保持久化
+    python3 -c "
+import json, os
+cfg_path = os.path.expanduser('~/.openclaw/openclaw.json')
+cfg = {}
+if os.path.exists(cfg_path):
+    with open(cfg_path) as f: cfg = json.load(f)
+cfg.setdefault('mcp', {}).setdefault('servers', {})['butler-backend'] = {
+    'type': 'http', 'url': 'http://localhost:18790', 'transport': 'http'
+}
+with open(cfg_path, 'w') as f: json.dump(cfg, f, indent=2)
+print('[OK] MCP registered in openclaw.json')
+" 2>/dev/null || echo "[WARN] MCP registration skipped"
 else
     echo "[WARN] MCP Bridge failed to start"
 fi
