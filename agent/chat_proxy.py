@@ -1227,9 +1227,9 @@ def openclaw_cli_help():
     results = {}
     # 尝试通过 openclaw CLI 和 Gateway 对话
     for cmd in [
-        "openclaw agent -m 你好 --json",
-        "openclaw agent -m 你好 --json --local",
-        "openclaw agent -m 你好 --json --token butler-demo-2026",
+        "openclaw agent -m 你好 --json --session main",
+        "openclaw agent -m 你好 --json --session main --local",
+        "openclaw agent -m 你好 --json --agent main --local",
     ]:
         try:
             r = subprocess.run(cmd.split(), capture_output=True, text=True, timeout=30, cwd="/app")
