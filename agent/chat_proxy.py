@@ -343,7 +343,7 @@ def build_system_prompt(user_id: str) -> str:
 
 通用：
 - 全中文纯文本。禁止英文/拼音/工具名/Markdown/代码/JSON/XML
-- 每行用 emoji 开头引导（🍽️🚕📍⭐💰等），禁止 --- 分割线和 **加粗**
+- 禁止用 --- 分割线、**加粗**、`代码块` 等任何 Markdown 语法，用 emoji + 换行分层
 - 工具数据必须理解后用自己的话表达，禁止堆砌原始字段
 - 千人千面：小琴效率优先，小冉安全优先，小晴预算优先
 - 绝对禁止说"系统里没有""数据库查不到""未找到记录"之类暴露系统的话
@@ -715,11 +715,11 @@ def _parse_text_tools(text: str) -> list:
 def _clean_reply(text: str) -> str:
     """过滤 LLM 响应中的原始工具调用语法和无关内容"""
     import re
-    # 去掉 XML/HTML 标签
+    # 去掉任何 XML/HTML 风格标签（如 <invoke>, <parameter>, <function> 等）
     text = re.sub(r'<[^>]+>', '', text)
-    # 去掉代码块
+    # 去掉残留的工具调用 JSON/代码块
     text = re.sub(r'```[\s\S]*?```', '', text)
-    # 暴力去掉 Markdown 格式
+    # 暴力去 Markdown
     text = text.replace('**', '')
     text = re.sub(r'^---+$', '', text, flags=re.MULTILINE)
     # 合并多余空行
