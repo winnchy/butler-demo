@@ -20,13 +20,13 @@ openclaw config set gateway.mode local 2>/dev/null || true
 # 工作区 (butler 文件)
 openclaw config set workspace /app/butler 2>/dev/null || true
 
-# 关键：Gateway 默认用 openai provider → 直接把 openai provider 指向 DeepSeek
+# Gateway 默认用 openai/gpt-5.5 → 把 openai provider 指向 DeepSeek + 模型改为 deepseek-chat
 OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://api.deepseek.com/v1}"
 if [ -n "$OPENAI_API_KEY" ]; then
-    # 覆盖 openai provider 的 API 地址和 Key → 实际走 DeepSeek
     openclaw config set auth.openai.apiKey "${OPENAI_API_KEY}" 2>/dev/null || true
     openclaw config set auth.openai.baseUrl "${OPENAI_BASE_URL}" 2>/dev/null || true
-    echo "[OK] OpenAI provider redirected to DeepSeek (${OPENAI_BASE_URL})"
+    openclaw config set models.default "openai/deepseek-chat" 2>/dev/null || true
+    echo "[OK] OpenAI→DeepSeek (${OPENAI_BASE_URL}) model=deepseek-chat"
 else
     echo "[WARN] OPENAI_API_KEY not set"
 fi
@@ -65,25 +65,14 @@ echo ""
 #    读取 /app/butler 下的 SOUL.md + SKILL.md + USER.md + MEMORY.md
 #    可通过 MCP bridge 调用后端工具
 # ================================================================
-echo ">>> Starting OpenClaw (Gateway + Agent) on port 18789..."
-# 尝试 serve 模式（同时启动 Gateway + Agent Core）
-openclaw serve --port 18789 --allow-unconfigured --password butler-demo-2026 &
+echo ">>> Starting OpenClaw Gateway on port 18789..."
+openclaw gateway --port 18789 --allow-unconfigured --password butler-demo-2026 &
 OC_PID=$!
-sleep 5
-
+sleep 3
 if kill -0 $OC_PID 2>/dev/null; then
-    echo "[OK] OpenClaw started (PID $OC_PID)"
-    # 探测可用端点
-    for ep in /health /api/chat /v1/chat /api/v1/chat /chat; do
-        if curl -s http://localhost:18789$ep -o /dev/null -w "%{http_code}" 2>/dev/null | grep -q '200\|201\|400\|401'; then
-            echo "  Found endpoint: $ep"
-        fi
-    done
+    echo "[OK] OpenClaw Gateway started (PID $OC_PID)"
 else
-    echo "[WARN] openclaw serve failed, trying gateway mode..."
-    openclaw gateway --port 18789 --allow-unconfigured --password butler-demo-2026 &
-    OC_PID=$!
-    sleep 3
+    echo "[WARN] Gateway failed to start"
 fi
 echo ""
 
