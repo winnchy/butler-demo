@@ -1172,6 +1172,38 @@ def health():
     }
 
 
+@app.get("/debug/ws-probe")
+async def ws_probe():
+    """从 Railway 内部探测 Gateway WebSocket 协议"""
+    import asyncio
+    results = {}
+    try:
+        import websockets
+    except:
+        return {"error": "websockets module not installed"}
+    async def probe(uri, send_msg, label):
+        try:
+            async with websockets.connect(uri, open_timeout=3) as ws:
+                await ws.send(send_msg)
+                resp = await asyncio.wait_for(ws.recv(), timeout=3)
+                results[label] = {"sent": send_msg[:200], "received": resp[:500]}
+        except asyncio.TimeoutError:
+            results[label] = {"sent": send_msg[:100], "error": "timeout waiting for response"}
+        except Exception as e:
+            results[label] = {"sent": send_msg[:100], "error": str(e)[:100]}
+    async def run():
+        import json as j
+        tasks = []
+        for path in ["/ws", "/chat", "/websocket", "/api/ws", "/"]:
+            uri = f"ws://localhost:18789{path}"
+            tasks.append(probe(uri, j.dumps({"message":"hi"}), f"{path}/json"))
+            tasks.append(probe(uri, j.dumps({"event":"user_message","content":"hi"}), f"{path}/event"))
+            tasks.append(probe(uri, "hi", f"{path}/text"))
+        await asyncio.gather(*tasks)
+    asyncio.run(run())
+    return {"gateway": "ws://localhost:18789", "results": results}
+
+
 @app.get("/debug/gateway")
 def debug_gateway():
     """探测 OpenClaw Gateway 暴露的所有端点"""
