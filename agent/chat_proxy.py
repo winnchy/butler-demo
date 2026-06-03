@@ -1177,8 +1177,12 @@ def debug_gateway():
     """探测 OpenClaw Gateway 暴露的所有端点"""
     import requests as req
     results = {}
-    # 尝试获取 openapi.json
-    for path in ["/openapi.json", "/docs", "/redoc", "/api", "/"]:
+    # 探测所有可能的端点
+    for path in ["/openapi.json", "/api/openapi.json", "/v1/openapi.json",
+                 "/api/v1/openapi.json", "/.well-known/openapi.json",
+                 "/agent/chat", "/api/agent/chat", "/api/v1/agent/chat",
+                 "/api/conversation", "/api/messages",
+                 "/docs", "/redoc", "/api", "/"]:
         try:
             r = req.get(f"http://localhost:18789{path}", timeout=3)
             results[path] = {"status": r.status_code, "preview": r.text[:200]}
