@@ -20,16 +20,40 @@ openclaw config set gateway.mode local 2>/dev/null || true
 # 工作区 (butler 文件)
 openclaw config set workspace /app/butler 2>/dev/null || true
 
-# Gateway 默认 openai/gpt-5.5 → 指向 DeepSeek
-OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://api.deepseek.com/v1}"
+# DeepSeek Provider 配置（官方文档格式）
 if [ -n "$OPENAI_API_KEY" ]; then
-    openclaw config set auth.openai.apiKey "${OPENAI_API_KEY}" 2>/dev/null || true
-    openclaw config set auth.openai.baseUrl "${OPENAI_BASE_URL}" 2>/dev/null || true
-    # 尝试多种方式覆盖模型
-    openclaw config set models.default "openai/deepseek-chat" 2>/dev/null || true
-    export OPENCLAW_MODEL="openai/deepseek-chat"
-    export OPENAI_MODEL="deepseek-chat"
-    echo "[OK] OpenAI→DeepSeek (${OPENAI_BASE_URL})"
+    # 升级到最新版（DeepSeek需要>=2026.4.24）
+    npm update -g openclaw@latest 2>/dev/null || true
+
+    # 手动写入 openclaw.json 配置文件（config set 的 provider 格式对 Gateway 可能无效）
+    mkdir -p /root/.openclaw
+    cat > /root/.openclaw/openclaw.json << 'OCEOF'
+{
+  "models": {
+    "mode": "merge",
+    "providers": {
+      "deepseek": {
+        "baseUrl": "https://api.deepseek.com",
+        "apiKey": "DEEPSEEK_KEY_PLACEHOLDER",
+        "api": "openai-completions",
+        "models": [
+          {"id": "deepseek-chat", "name": "DeepSeek Chat", "reasoning": false,
+           "input": ["text"], "contextWindow": 128000, "maxTokens": 8192,
+           "cost": {"input": 0.00000028, "output": 0.00000042, "cacheRead": 0.000000028, "cacheWrite": 0.00000028}}
+        ]
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": {"primary": "deepseek/deepseek-chat"}
+    }
+  }
+}
+OCEOF
+    # 替换占位符
+    sed -i "s|DEEPSEEK_KEY_PLACEHOLDER|${OPENAI_API_KEY}|g" /root/.openclaw/openclaw.json
+    echo "[OK] DeepSeek provider configured (deepseek/deepseek-chat)"
 else
     echo "[WARN] OPENAI_API_KEY not set"
 fi
