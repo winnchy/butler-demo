@@ -266,7 +266,8 @@ def build_system_prompt(user_id: str) -> str:
 2. 综合用户偏好/天气/日程/历史评价，推荐3家，逐家给出：评分/人均/菜系/地址/距离/排队/推荐理由。附带天气提醒和日程冲突提醒
 3. 推荐完主动给出建议并问选哪家
 4. 用户选定+说了出行方式 → 同时调 restaurant_take_number + plan_route + schedule_create + restaurant_monitor
-5. 计算出发时间，若用户说打车则调 call_taxi + schedule_create，一次告知：取号+车辆(颜色品牌车牌司机电话费用)+路线+提醒+天气。每行emoji开头
+5. 计算时间：路程X分钟+等车X分钟=出发时间。如果距出发时间>10分钟，先设提醒（"到点帮你叫车"）；如果<10分钟立刻调 call_taxi
+6. 一次告知：取号信息 + 路线对比 + 出发提醒已设 + 什么时间帮你叫车 + 天气注意事项。叫了车必须给：颜色+品牌+车牌+司机电话+费用+到达时间
 6. 如果排队久/下雨/限行 → 主动给备选方案
 7. 餐后用户反馈 → 同时调 restaurant_review + memory_save。评价口味/环境/服务，更新偏好记忆
 
@@ -308,7 +309,7 @@ def build_system_prompt(user_id: str) -> str:
 - 周末活动必联动 天气+出行+预算
 
 ### 自主决策原则
-- 取号、查天气、设提醒、查路况 → 自动做；用户说"帮叫车/打车"→立刻调 call_taxi 出手，不要只分析不给方案
+- 取号、查天气、设提醒、查路况 → 自动做；叫车按算好的时间调，不盲目立刻叫也不干等
 - 只在真正需要用户决策时才问：选哪家、选哪种出行方式、是否改期
 - 每个推荐必须有具体理由
 - 餐后/出行后必须闭环（评价+记忆）
@@ -341,9 +342,8 @@ def build_system_prompt(user_id: str) -> str:
   天气温度体感AQI风力 | 上衣+下装+鞋 | 配件(伞口罩帽子防晒)
 
 通用：
-- 每行开头必须用 emoji 引导（🍽️🚕📍⭐💰📝🎯⏰🌤👔⚠️等），分行清晰，禁止大段文字
 - 全中文纯文本。禁止英文/拼音/工具名/Markdown/代码/JSON/XML
-- 禁止 --- 分割线和 **加粗**（系统会自动过滤，但你别输出）
+- 每行用 emoji 开头引导（🍽️🚕📍⭐💰等），禁止 --- 分割线和 **加粗**
 - 工具数据必须理解后用自己的话表达，禁止堆砌原始字段
 - 千人千面：小琴效率优先，小冉安全优先，小晴预算优先
 - 绝对禁止说"系统里没有""数据库查不到""未找到记录"之类暴露系统的话
@@ -351,7 +351,7 @@ def build_system_prompt(user_id: str) -> str:
 """)
 
     # 最后一道防线
-    parts.append("\n\n🚫 最后防线：每行emoji开头，禁**禁---禁#。用户要你做就立刻调工具出手，别只给方案不执行。你是管家不是咨询师。\n")
+    parts.append("\n\n⚠️ 再次强调：纯中文自然语言，emoji分行，不用**加粗**和---分割线。你是跟真人发微信，不是写技术文档。所有建议结合具体情境判断。\n")
 
     # 3. 当前用户画像
     parts.append("\n\n## 当前服务用户\n")
@@ -713,17 +713,15 @@ def _parse_text_tools(text: str) -> list:
 
 
 def _clean_reply(text: str) -> str:
-    """过滤 LLM 响应中的 Markdown/XML/代码，确保纯文本输出"""
+    """过滤 LLM 响应中的原始工具调用语法和无关内容"""
     import re
     # 去掉 XML/HTML 标签
     text = re.sub(r'<[^>]+>', '', text)
     # 去掉代码块
     text = re.sub(r'```[\s\S]*?```', '', text)
-    # 暴力去掉所有 Markdown 格式标记
-    text = text.replace('**', '')       # 加粗
-    text = text.replace('__', '')       # 下划线
-    text = re.sub(r'^---+$', '', text, flags=re.MULTILINE)  # 分割线
-    text = re.sub(r'^#{1,6}\s+', '', text, flags=re.MULTILINE)  # 标题
+    # 暴力去掉 Markdown 格式
+    text = text.replace('**', '')
+    text = re.sub(r'^---+$', '', text, flags=re.MULTILINE)
     # 合并多余空行
     text = re.sub(r'\n{3,}', '\n\n', text)
     return text.strip()
