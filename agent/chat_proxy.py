@@ -551,7 +551,12 @@ def chat_direct_deepseek(message: str, user_id: str) -> str:
         return final_reply
 
     except Exception as e:
-        # 返回错误但不暴露技术细节
+        import traceback
+        _last_chat_diag.update({
+            "mode": "standalone_error",
+            "error": str(e)[:300],
+            "traceback": traceback.format_exc()[-500:]
+        })
         return f"小管暂时有点忙，请稍后再试～"
 
 # ---- 用户切换 ----
