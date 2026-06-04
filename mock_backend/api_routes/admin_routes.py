@@ -181,6 +181,39 @@ def speed_up():
     }
 
 
+@router.post("/change-weather")
+def change_weather():
+    """随机切换天气（用于演示不同天气场景）"""
+    import random
+    ws = main.world_state
+    if not ws:
+        return {"error": "WorldState not initialized"}
+    weathers = [
+        {"condition": "晴", "temp": 28, "aqi": 55},
+        {"condition": "多云", "temp": 24, "aqi": 72},
+        {"condition": "阴", "temp": 20, "aqi": 90},
+        {"condition": "小雨", "temp": 18, "aqi": 65},
+        {"condition": "暴雨", "temp": 22, "aqi": 40, "alert": "暴雨黄色预警"},
+        {"condition": "沙尘暴", "temp": 16, "aqi": 350, "alert": "沙尘暴橙色预警"},
+        {"condition": "雷暴", "temp": 26, "aqi": 80, "alert": "雷电黄色预警"},
+        {"condition": "高温", "temp": 38, "aqi": 120, "alert": "高温橙色预警"},
+    ]
+    w = random.choice(weathers)
+    if hasattr(ws, 'weather_state') and ws.weather_state:
+        ws.weather_state['condition'] = w["condition"]
+        ws.weather_state['temperature'] = w["temp"]
+        ws.weather_state['aqi'] = w["aqi"]
+    if hasattr(ws.weather, 'condition'):
+        ws.weather.condition = w["condition"]
+        ws.weather.current_temp = w["temp"]
+        ws.weather.aqi = w["aqi"]
+        if w.get("alert"):
+            ws.weather.alerts = [{"type": w["alert"], "level": w["alert"][:2]}]
+        else:
+            ws.weather.alerts = []
+    return {"ok": True, "condition": w["condition"], "temp": w["temp"], "aqi": w["aqi"]}
+
+
 @router.get("/state")
 def get_full_state():
     """查看当前完整动态状态"""

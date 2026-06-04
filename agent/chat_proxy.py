@@ -682,6 +682,8 @@ def _is_raw_data_leak(text: str) -> bool:
         (r'让我回顾一下刚刚的对话', 'reasoning leak'),
         (r'Mock.*后端.*连不上', 'backend leak'),
         (r'后端.*不可用', 'backend leak'),
+        (r'系统.*暂时.*没拉', 'backend leak'),
+        (r'系统这边.*没', 'backend leak'),
         (r'数据库.*记录', 'backend leak'),
         (r'让我再试', 'reasoning'),
         # 裸工具参数（多行短文本 = 可能是工具参数泄露）
@@ -801,7 +803,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   <div style="font-size:11px;color:#666;margin-bottom:4px">🎬 场景触发（<span id="scene-count">0</span>个）</div>
   <div id="scene-list"></div>
   <div class="divider"></div>
-  <button class="scene-btn" onclick="speedUp()" style="color:#f59e0b">⚡ 加速测试（数据动态变化）</button>
+  <button class="scene-btn" onclick="speedUp()" style="color:#f59e0b">⚡ 加速数据变化</button>
+  <div style="display:flex;gap:4px">
+    <button class="scene-btn" onclick="fastForward(10)" style="color:#60a5fa;flex:1">⏩ +10分</button>
+    <button class="scene-btn" onclick="fastForward(30)" style="color:#818cf8;flex:1">⏩ +30分</button>
+  </div>
+  <button class="scene-btn" onclick="changeWeather()" style="color:#fbbf24">🌤️ 随机切换天气</button>
   <button class="scene-btn" onclick="resetAll()" style="color:#fca5a5">重置所有场景</button>
   <div class="divider"></div>
   <div id="live-monitors" style="font-size:11px;color:#888">
@@ -945,15 +952,26 @@ function addMessage(role, text, isTemp) {
 async function switchUser(uid) {
   currentUser = uid;
   activeSceneId = null;
-  renderSceneButtons();  // 按用户过滤场景
+  renderSceneButtons();
+  // 清空聊天+历史，隔离用户
+  document.getElementById('messages').innerHTML = '';
+  try { await fetch('/api/clear-history?user_id=' + uid, {method:'POST'}); } catch(e) {}
   try { await fetch('/switch-user/' + uid, {method:'POST'}); } catch(e) {}
+  // 重置场景状态
+  try { await fetch('/api/scenario-reset', {method:'POST'}); } catch(e) {}
+  updateWeatherBar();
+  // 根据顶部时间生成应景问候
+  const timeEl = document.getElementById('wb-time');
+  const displayTime = timeEl ? timeEl.textContent : '';
+  const isNoon = displayTime.includes('11:') || displayTime.includes('12:') || displayTime.includes('13:');
+  const isMorning = displayTime.includes('07:') || displayTime.includes('08:') || displayTime.includes('09:') || displayTime.includes('10:');
+  const isEvening = displayTime.includes('17:') || displayTime.includes('18:') || displayTime.includes('19:') || displayTime.includes('20:');
   const greetings = {
-    white_collar: '你好小琴！今天北京晴28°C。中午想吃什么？',
-    parent: '早啊小冉！乐乐今天状态不错～需要帮你安排什么？',
-    student: '嗨小晴！今天中关村阴转多云22°C。需要帮什么忙？'
+    white_collar: isNoon ? '小琴中午好！需要帮您安排午餐吗？' : isMorning ? '小琴早！今天通勤路况不错～' : isEvening ? '小琴辛苦了，下班路况帮您看着～' : '小琴好～有什么需要？',
+    parent: isNoon ? '小冉中午好！乐乐午睡了吗？' : isMorning ? '小冉早！今天送乐乐去早教吗？' : isEvening ? '小冉辛苦了，阿彬回来了吗？' : '小冉好～需要帮什么忙？',
+    student: isNoon ? '小晴中午好！食堂还是外卖？' : isMorning ? '小晴早！今天有课吗？' : isEvening ? '小晴晚上好！自习还是放松？' : '小晴好～有什么需要？'
   };
   addMessage('bot', greetings[uid] || '已切换用户～');
-  // header dropdown is for functional switching, sidebar for profile cards
 }
 
 let isAutoPlaying = false;
@@ -1042,8 +1060,29 @@ async function speedUp() {
     const r = await fetch(BACKEND_URL + '/admin/speed-up', {method:'POST'});
     const d = await r.json();
     toast('数据已刷新！', 'ok');
-    addMessage('bot', '⚡ <b>加速测试完成</b>：餐厅排队、天气、路况已随机变化～现在再去问问管家感受变化吧！');
-  } catch(e) { toast('加速测试失败', 'err'); }
+    updateWeatherBar();
+    addMessage('bot', '⚡ 餐厅排队、天气、路况已随机变化～');
+  } catch(e) { toast('加速失败', 'err'); }
+}
+
+async function fastForward(mins) {
+  try {
+    const r = await fetch('/api/fast-forward?minutes=' + mins, {method:'POST'});
+    const d = await r.json();
+    toast('时间快进' + mins + '分钟！', 'ok');
+    updateWeatherBar();
+    addMessage('bot', '⏩ 时间已快进' + mins + '分钟 → ' + (d.new_time || ''));
+  } catch(e) { toast('快进失败', 'err'); }
+}
+
+async function changeWeather() {
+  try {
+    const r = await fetch(BACKEND_URL + '/admin/change-weather', {method:'POST'});
+    const d = await r.json();
+    toast('天气已切换！', 'ok');
+    updateWeatherBar();
+    addMessage('bot', '🌤️ 天气已切换 → ' + (d.condition || '') + ' ' + (d.temp || '') + '°C');
+  } catch(e) { toast('切换失败', 'err'); }
 }
 
 function toast(msg, type) {
@@ -1610,6 +1649,29 @@ def set_scenario_time(scenario_id: str):
         "description": s.get("title", ""),
     }
     return {"ok": True, "time": _scenario_time["time"]}
+
+@app.post("/api/fast-forward")
+def fast_forward_time(minutes: int = 10):
+    """快进场景时间"""
+    global _scenario_time
+    from datetime import datetime, timedelta
+    if _scenario_time:
+        # 解析当前场景时间并快进
+        try:
+            old = _scenario_time["time"]  # format: "06/01 周一 11:45"
+            parts = old.split(" ")
+            date_part = parts[0]  # "06/01"
+            time_part = parts[-1]  # "11:45"
+            month, day = date_part.split("/")
+            hour, minute = time_part.split(":")
+            dt = datetime(2026, int(month), int(day), int(hour), int(minute))
+            dt = dt + timedelta(minutes=minutes)
+            new_time = dt.strftime("%m/%d %a %H:%M")
+            _scenario_time["time"] = new_time
+            return {"ok": True, "new_time": new_time, "minutes": minutes}
+        except:
+            pass
+    return {"ok": True, "new_time": f"+{minutes}分", "minutes": minutes}
 
 @app.post("/api/scenario-reset")
 def reset_scenario_time():
