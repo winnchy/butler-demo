@@ -809,6 +809,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   <div class="divider"></div>
   <button class="scene-btn" onclick="speedUp()" style="color:#f59e0b">⚡ 加速测试（数据动态变化）</button>
   <button class="scene-btn" onclick="resetAll()" style="color:#fca5a5">重置所有场景</button>
+  <div class="divider"></div>
+  <div id="live-monitors" style="font-size:11px;color:#888">
+    <div style="color:#aaa;margin-bottom:4px">📡 实时监控</div>
+    <div id="monitor-content" style="color:#666">暂无活跃监控</div>
+  </div>
   <div style="margin-top:auto;font-size:10px;color:#444">Powered by OpenClaw<br>Agent v2.0</div>
 </div>
 
@@ -1057,6 +1062,29 @@ async function toggleNotifications() {
 }
 setInterval(pollNotifications, 30000);
 pollNotifications();
+
+// 实时监控轮询
+async function pollMonitors() {
+  try {
+    const r = await fetch('/api/monitors?user_id=' + currentUser);
+    const d = await r.json();
+    const el = document.getElementById('monitor-content');
+    if (!d.monitors || d.monitors.length === 0) {
+      el.innerHTML = '<span style="color:#555">暂无活跃监控</span>';
+      return;
+    }
+    el.innerHTML = d.monitors.map(m => {
+      if (m.type === 'restaurant_queue') {
+        return '<div style="margin:4px 0;padding:4px 6px;background:#1a2a1a;border-radius:4px;border-left:2px solid #10b981">🍽 ' + (m.restaurant_name||'餐厅') + '<br>🕐 排队: ' + m.current_queue + '桌 | ⏳约' + m.wait_min + '分</div>';
+      } else if (m.type === 'taxi') {
+        return '<div style="margin:4px 0;padding:4px 6px;background:#1a1a2a;border-radius:4px;border-left:2px solid #3b82f6">🚕 ' + (m.car_info||'叫车中') + '<br>⏱ 预计' + (m.wait_min||'?') + '分到达</div>';
+      }
+      return '';
+    }).join('');
+  } catch(e) {}
+}
+setInterval(pollMonitors, 15000);
+pollMonitors();
 
 
 function closeProfileCard() {
