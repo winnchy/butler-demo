@@ -1003,6 +1003,7 @@ async function triggerScene(id) {
   try { await fetch(BACKEND_URL + '/admin/reset', {method:'POST'}); } catch(e) {}
   // 同步场景时间上下文到天气栏
   try { await fetch('/api/scenario-time/' + id, {method:'POST'}); } catch(e) {}
+  updateWeatherBar();  // 立即刷新顶部时间
 
   // 清空聊天+历史
   document.getElementById('messages').innerHTML = '';
