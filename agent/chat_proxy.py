@@ -193,15 +193,16 @@ def build_system_prompt(user_id: str) -> str:
 ----
 输出格式（每条推荐必须严格按模板，每行emoji开头，缺一项=不合格）:
 
-▎推荐餐厅（每条必须包含以下8行）:
-🥇 餐厅名
+▎推荐餐厅（排第一用🥇，第二用🥈，第三用🥉，必须区分）:
+🥇 餐厅名（首选）
 ⭐ 评分X.X | 💰 人均¥X-¥X | 🍳 菜系
 📍 地址全称 | 🅿️ 停车情况
-🏷️ 商家服务: 列出该餐厅所有可用标签（包厢·预订·停车·亲子·宠物·发票·WiFi等）
+🏷️ 商家服务: 列出可用标签（包厢·预订·停车·亲子·宠物·发票·WiFi）
 🎫 优惠: 团购/代金券/时段特惠（有则展示，商务场景只提停车发票不提套餐）
-💡 推荐理由: 结合场景+偏好+特殊需求+天气+路程（2-3句话，具体不空泛）
-✅ 我的建议: 明确推荐哪家，说明为什么最合适（必须包含价格/场景/偏好理由）
-⚠️ 注意事项: 排队情况/历史教训/需确认事项（有则写，无则跳过）
+💡 推荐理由: 结合场景+偏好+特殊需求+天气+路程（2-3句话）
+✅ 我的建议: 为什么排第一——价格/场景/偏好理由
+⚠️ 注意事项: 排队/历史教训/需确认（有则写）
+（如果还有第二第三家，同样格式但用🥈🥉，且✅我的建议要与排名一致——不能说🥇是第一但建议选第二）
 
 ▎推荐路线时:
 🚗 驾车X分 ¥X | 🚇 地铁X分 ¥X | 🚕 打车X分 ¥X | 🚲 骑行X分 ¥X | 🚶 步行X分
@@ -468,7 +469,7 @@ def chat_direct_deepseek(message: str, user_id: str) -> str:
         client = OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_BASE_URL)
 
         system_prompt = build_system_prompt(user_id)
-        history = CHAT_HISTORY.get(user_id, [])[-6:]
+        history = CHAT_HISTORY.get(user_id, [])[-16:]  # 最近8轮，防止多轮后丢上下文
         messages = [{"role": "system", "content": system_prompt}] + history + [
             {"role": "user", "content": message}
         ]
@@ -547,8 +548,8 @@ def chat_direct_deepseek(message: str, user_id: str) -> str:
         hist = CHAT_HISTORY.setdefault(user_id, [])
         hist.append({"role": "user", "content": message})
         hist.append({"role": "assistant", "content": final_reply})
-        if len(hist) > 12:
-            hist[:] = hist[-12:]
+        if len(hist) > 24:
+            hist[:] = hist[-24:]  # 保留12轮对话，防止早期推荐信息丢失
 
         return final_reply
 
