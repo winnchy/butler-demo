@@ -809,6 +809,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <button class="scene-btn" onclick="fastForward(30)" style="color:#818cf8;flex:1">⏩ +30分</button>
   </div>
   <button class="scene-btn" onclick="changeWeather()" style="color:#fbbf24">🌤️ 随机切换天气</button>
+  <div style="display:flex;gap:4px">
+    <button class="scene-btn" onclick="switchDayType('weekday')" style="color:#34d399;flex:1">📅 工作日</button>
+    <button class="scene-btn" onclick="switchDayType('weekend')" style="color:#f472b6;flex:1">🎉 周末</button>
+  </div>
   <button class="scene-btn" onclick="resetAll()" style="color:#fca5a5">重置所有场景</button>
   <div class="divider"></div>
   <div id="live-monitors" style="font-size:11px;color:#888">
@@ -1075,6 +1079,16 @@ async function fastForward(mins) {
   } catch(e) { toast('快进失败', 'err'); }
 }
 
+async function switchDayType(type) {
+  try {
+    const r = await fetch('/api/switch-day?type=' + type, {method:'POST'});
+    const d = await r.json();
+    toast('已切换为' + (type === 'weekday' ? '工作日' : '周末') + '！', 'ok');
+    updateWeatherBar();
+    addMessage('bot', (type === 'weekday' ? '📅' : '🎉') + ' 已切换为<b>' + (type === 'weekday' ? '工作日' : '周末') + '</b> → ' + (d.new_time || ''));
+  } catch(e) { toast('切换失败', 'err'); }
+}
+
 async function changeWeather() {
   try {
     const r = await fetch(BACKEND_URL + '/admin/change-weather', {method:'POST'});
@@ -1285,8 +1299,12 @@ def get_monitors(user_id: str = "white_collar"):
 @app.get("/api/notifications")
 def get_notifications(user_id: str = "white_collar"):
     """获取当前用户的推送通知"""
+    import re as _nre
     user_notifs = [n for n in heartbeat.notifications if n["user_id"] == user_id]
-    # 返回未读的 + 最近10条已读
+    # 清洗通知中的 Markdown
+    for n in user_notifs:
+        n["message"] = _nre.sub(r'\*\*([^*]+)\*\*', r'\1', n.get("message", ""))
+        n["message"] = _nre.sub(r'###+\s*', '', n["message"])
     unread = [n for n in user_notifs if not n["read"]]
     recent = [n for n in user_notifs if n["read"]][:10]
     return {
@@ -1675,6 +1693,36 @@ def fast_forward_time(minutes: int = 10):
     except:
         _scenario_time = None
         return {"ok": False, "error": "时间解析失败"}
+
+@app.post("/api/switch-day")
+def switch_day_type(type: str = "weekday"):
+    """切换工作日/周末——日期和星期几跟着变"""
+    global _scenario_time
+    from datetime import datetime, timedelta
+    if not _scenario_time:
+        now = datetime.now()
+        _scenario_time = {"time": now.strftime("%m/%d %a %H:%M"), "description": "自由模式"}
+    try:
+        old = _scenario_time["time"]
+        parts = old.split(" ")
+        date_part = parts[0]
+        time_part = parts[-1]
+        month, day = date_part.split("/")
+        hour, minute = time_part.split(":")
+        dt = datetime(2026, int(month), int(day), int(hour), int(minute))
+        # 找到最近的工作日或周末
+        current_weekday = dt.weekday()  # 0=Mon, 5=Sat, 6=Sun
+        if type == "weekday":
+            if current_weekday >= 5:  # 周末→调到周一
+                dt = dt + timedelta(days=(7 - current_weekday))
+        else:  # weekend
+            if current_weekday < 5:  # 工作日→调到周六
+                dt = dt + timedelta(days=(5 - current_weekday))
+        new_time = dt.strftime("%m/%d %a %H:%M")
+        _scenario_time["time"] = new_time
+        return {"ok": True, "new_time": new_time, "type": type}
+    except:
+        return {"ok": False}
 
 @app.post("/api/scenario-reset")
 def reset_scenario_time():
