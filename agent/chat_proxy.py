@@ -930,7 +930,6 @@ async function triggerScene(id) {
 
   // 触发 WorldState 变化
   try { await fetch(BACKEND_URL + '/admin/trigger/scenario/' + id, {method:'POST'}); } catch(e) {}
-  // 重置旧场景
   try { await fetch(BACKEND_URL + '/admin/reset', {method:'POST'}); } catch(e) {}
 
   // 清空聊天+历史
@@ -944,44 +943,45 @@ async function triggerScene(id) {
   document.querySelectorAll('.user-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('btn-' + (script.user==='white_collar'?'wc':script.user==='parent'?'parent':'student'))?.classList.add('active');
 
-  // 锁定输入
-  isAutoPlaying = true;
-  document.getElementById('userInput').disabled = true;
-  document.getElementById('userInput').placeholder = '🔄 沙盒演示中...';
-
-  // 开场标识
-  addMessage('bot', '🎬 <b>沙盒演示：' + script.title + '</b><br><span style="font-size:11px;color:#888">场景已激活，WorldState数据已更新，开始自动对话...</span>');
-
-  // 自动播放
-  for (let i = 0; i < script.steps.length; i++) {
-    const step = script.steps[i];
-    await new Promise(r => setTimeout(r, step.delay || 2000));
-    addMessage('user', step.msg);
-    // 发送真实请求，失败重试一次
-    let reply = '';
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const controller = new AbortController();
-        const to = setTimeout(() => controller.abort(), 60000);
-        const resp = await fetch('/chat', {
-          method:'POST', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({message: step.msg, user_id: script.user}),
-          signal: controller.signal
-        });
-        clearTimeout(to);
-        const data = await resp.json();
-        reply = data.reply || data.response || '';
-        if (reply) break;
-      } catch(e) { reply = '...重试中...'; await new Promise(r => setTimeout(r, 1000)); }
-    }
-    addMessage('bot', reply || '管家正在思考...');
+  // v2 模式：使用 opener 开场白 → 用户自由对话
+  if (script.opener) {
+    addMessage('bot', '🎬 <b>沙盒场景：' + script.title + '</b><br><span style="font-size:12px;color:#aaa">' + (script.description || '') + '</span><br><span style="font-size:11px;color:#888">场景已激活，下方是建议开场白，你可以修改或直接发送👇</span>');
+    document.getElementById('userInput').value = script.opener;
+    document.getElementById('userInput').disabled = false;
+    document.getElementById('userInput').placeholder = '输入消息...';
+    document.getElementById('userInput').focus();
+    return;
   }
 
-  // 解锁
-  isAutoPlaying = false;
-  document.getElementById('userInput').disabled = false;
-  document.getElementById('userInput').placeholder = '输入消息...';
-  addMessage('bot', '✅ <b>演示结束</b> — 你可以继续对话或选其他场景～');
+  // v1 兼容：原多步自动播放模式
+  if (script.steps) {
+    isAutoPlaying = true;
+    document.getElementById('userInput').disabled = true;
+    document.getElementById('userInput').placeholder = '🔄 沙盒演示中...';
+    addMessage('bot', '🎬 <b>沙盒演示：' + script.title + '</b><br><span style="font-size:11px;color:#888">场景已激活，开始自动对话...</span>');
+    for (let i = 0; i < script.steps.length; i++) {
+      const step = script.steps[i];
+      await new Promise(r => setTimeout(r, step.delay || 2000));
+      addMessage('user', step.msg);
+      let reply = '';
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const controller = new AbortController();
+          const to = setTimeout(() => controller.abort(), 60000);
+          const resp = await fetch('/chat', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({message: step.msg, user_id: script.user}), signal: controller.signal});
+          clearTimeout(to);
+          const data = await resp.json();
+          reply = data.reply || data.response || '';
+          if (reply) break;
+        } catch(e) { reply = '...重试中...'; await new Promise(r => setTimeout(r, 1000)); }
+      }
+      addMessage('bot', reply || '管家正在思考...');
+    }
+    isAutoPlaying = false;
+    document.getElementById('userInput').disabled = false;
+    document.getElementById('userInput').placeholder = '输入消息...';
+    addMessage('bot', '✅ <b>演示结束</b> — 你可以继续对话或选其他场景～');
+  }
 }
 
 async function resetAll() {
