@@ -516,17 +516,32 @@ def chat_direct_deepseek(message: str, user_id: str) -> str:
                 messages.append({"role": "tool", "tool_call_id": tc_id, "content": tool_result})
                 tool_results_collected.append(f"\n[{tc_name}]: {tool_result[:300]}")
 
-        # 用干净上下文生成最终回复（避免中间泄露污染）
+        # 用完整消息历史生成最终回复（保留所有工具结果保证上下文连贯）
         if not final_reply:
-            clean_msgs = [{"role": "system", "content": build_system_prompt(user_id)}]
-            clean_msgs.append({"role": "user", "content": message})
-            if tool_results_collected:
-                clean_msgs.append({"role": "user", "content": "工具执行结果：\n" + "\n".join(tool_results_collected[-8:]) + "\n\n请基于以上数据，严格按输出模板生成最终回复。"})
             response_final = client.chat.completions.create(
-                model="deepseek-chat", messages=clean_msgs, temperature=0.7,
+                model="deepseek-chat", messages=messages, temperature=0.7,
                 max_tokens=1500, timeout=30,
             )
             final_reply = _clean_reply(response_final.choices[0].message.content or "")
+            # 二次强力清洗确保无泄露
+            if _is_raw_data_leak(final_reply):
+                final_reply = _clean_reply(final_reply)
+                if _is_raw_data_leak(final_reply):
+                    # 仍然泄露则尝试从纯工具结果重新生成
+                    tool_summary = "\n".join(tool_results_collected[-5:]) if tool_results_collected else "无工具结果"
+                    retry_msgs = [
+                        {"role": "system", "content": build_system_prompt(user_id)},
+                        {"role": "user", "content": message},
+                        {"role": "user", "content": f"工具数据:\n{tool_summary}\n\n请基于以上数据，严格按输出模板生成回复。保留对话上下文，引用之前推荐过的餐厅。"}
+                    ]
+                    # 也保留最近历史
+                    for h in history[-3:]:
+                        retry_msgs.insert(1, {"role": h["role"], "content": _clean_reply(h.get("content", ""))})
+                    response_retry = client.chat.completions.create(
+                        model="deepseek-chat", messages=retry_msgs, temperature=0.7,
+                        max_tokens=1500, timeout=30,
+                    )
+                    final_reply = _clean_reply(response_retry.choices[0].message.content or "")
 
         ## 保存历史
         hist = CHAT_HISTORY.setdefault(user_id, [])
