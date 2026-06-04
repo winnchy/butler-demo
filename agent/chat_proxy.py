@@ -1501,13 +1501,14 @@ async def proxy_backend(path: str, request: dict = None):
     """代理后端请求 — 前端场景触发/加速测试等"""
     try:
         url = f"{BACKEND_URL}/{path}"
-        if request:
-            r = requests.post(url, json=request, timeout=8)
+        # admin 路径（trigger/reset/speed-up）始终用 POST，其余用 GET
+        if path.startswith("admin/") or request:
+            r = requests.post(url, json=request if request else {}, timeout=8)
         else:
             r = requests.get(url, timeout=8)
-        return r.json()
-    except:
-        return {"error": f"Cannot reach backend: {BACKEND_URL}"}
+        return r.json() if r.text else {"ok": True}
+    except Exception as e:
+        return {"error": f"Backend unreachable", "detail": str(e)[:100]}
 
 
 if __name__ == "__main__":
