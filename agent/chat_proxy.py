@@ -805,13 +805,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   <div class="divider"></div>
   <button class="scene-btn" onclick="speedUp()" style="color:#f59e0b">⚡ 加速数据变化</button>
   <div style="display:flex;gap:4px">
-    <button class="scene-btn" onclick="fastForward(10)" style="color:#60a5fa;flex:1">⏩ +10分</button>
-    <button class="scene-btn" onclick="fastForward(30)" style="color:#818cf8;flex:1">⏩ +30分</button>
+    <button class="scene-btn" onclick="fastForward(10)" style="color:#60a5fa;flex:1">⏩ +10分钟</button>
+    <button class="scene-btn" onclick="fastForward(30)" style="color:#818cf8;flex:1">⏩ +30分钟</button>
   </div>
   <button class="scene-btn" onclick="changeWeather()" style="color:#fbbf24">🌤️ 随机切换天气</button>
   <div style="display:flex;gap:4px">
     <button class="scene-btn" onclick="switchDayType('weekday')" style="color:#34d399;flex:1">📅 工作日</button>
-    <button class="scene-btn" onclick="switchDayType('weekend')" style="color:#f472b6;flex:1">🎉 周末</button>
+    <button class="scene-btn" onclick="switchDayType('weekend')" style="color:#f472b6;flex:1">🏖️ 周末</button>
   </div>
   <button class="scene-btn" onclick="resetAll()" style="color:#fca5a5">重置所有场景</button>
   <div class="divider"></div>
@@ -1085,7 +1085,7 @@ async function switchDayType(type) {
     const d = await r.json();
     toast('已切换为' + (type === 'weekday' ? '工作日' : '周末') + '！', 'ok');
     updateWeatherBar();
-    addMessage('bot', (type === 'weekday' ? '📅' : '🎉') + ' 已切换为<b>' + (type === 'weekday' ? '工作日' : '周末') + '</b> → ' + (d.new_time || ''));
+    addMessage('bot', (type === 'weekday' ? '📅' : '🏖️') + ' 已切换为<b>' + (type === 'weekday' ? '工作日' : '周末') + '</b> → ' + (d.new_time || ''));
   } catch(e) { toast('切换失败', 'err'); }
 }
 
