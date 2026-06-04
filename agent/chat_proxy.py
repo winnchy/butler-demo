@@ -183,7 +183,7 @@ def build_system_prompt(user_id: str) -> str:
 ② 用户说的人就是那个人。用户说"领导""合作方"≠王总。不要自己套名字。除非用户明确提到名字，否则用"领导""合作方"等泛称。
 ③ 每行emoji开头。禁**加粗**、禁```代码块、禁`行内码`、禁JSON、禁API名称。工具数据理解后重述。
 ④ 结尾给完整结语陈述，绝不以问句收尾。禁止"要不要""需不需要""还有什么""可以吗""对吗""好吗"等。
-⑤ 并联调工具：吃=restaurant_recommend+get_weather+get_schedule+get_shopping并联。行=plan_route(全模式)+get_traffic+get_weather并联。天/雨/温度相关→必须先调get_weather+weather_alerts再开口。用户描述与工具结果矛盾时，以工具为准但不否定用户："当前数据显示X，但您观察到的Y很重要，我按两套方案准备"。
+⑤ 并联调工具：天/雨/温度相关→必须先调get_weather+weather_alerts再开口。"天突然黑了""天阴了"≠已经下雨，查了再说。用户描述与工具结果矛盾时，以工具为准但不否定用户。暴雨天气必提醒：收阳台衣物+关窗+检查车是否在地下车库+避免骑行/步行远路。不要假设用户开了车——先问出行方式。
 ⑥ 商务宴请：不提家人/孩子/宠物/团购/套餐。提包厢、停车、发票。
 ⑦ 叫车时机：用户说"X点到"≠立刻叫车。先看现在几点+路程多久→反推出发时间→到点再叫。告知用户"现在X点，路程Y分钟，建议Z点出发，届时叫车"。
 ⑧ 短距离(<1.5km或步行<15分钟)：建议步行，不问要不要打车。说"步行仅X分钟，比等车快"。除非暴雨/带老人/带娃/赶时间——此时确认距离太近是否仍需打车。
@@ -205,7 +205,7 @@ def build_system_prompt(user_id: str) -> str:
 💡 推荐理由: 结合场景+偏好+特殊需求+天气+路程（2-3句话）
 ✅ 我的建议: 为什么排第一——价格/场景/偏好理由
 ⚠️ 注意事项: 排队/历史教训/需确认（有则写）
-（如果还有第二第三家，同样格式但用🥈🥉，且✅我的建议要与排名一致——不能说🥇是第一但建议选第二）
+（第二条🥈第三条🥉，严禁全部用🥇。每条✅建议必须与排名一致）
 
 ▎推荐路线时:
 🚗 驾车X分 ¥X | 🚇 地铁X分 ¥X | 🚕 打车X分 ¥X | 🚲 骑行X分 ¥X | 🚶 步行X分
@@ -949,7 +949,7 @@ async function triggerScene(id) {
 
   // v2 模式：使用 opener 开场白 → 用户自由对话
   if (script.opener) {
-    addMessage('bot', '🎬 <b>沙盒场景：' + script.title + '</b><br><span style="font-size:12px;color:#aaa">' + (script.description || '') + '</span><br><span style="font-size:11px;color:#888">场景已激活，下方是建议开场白，你可以修改或直接发送👇</span>');
+    addMessage('bot', '🎬 <b>沙盒场景：' + script.title + '</b><br><span style="font-size:11px;color:#888">场景已激活，下方是建议开场白，你可以修改或直接发送👇</span>');
     document.getElementById('userInput').value = script.opener;
     document.getElementById('userInput').disabled = false;
     document.getElementById('userInput').placeholder = '输入消息...';
