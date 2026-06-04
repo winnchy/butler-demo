@@ -1018,6 +1018,21 @@ async function triggerScene(id) {
     document.getElementById('userInput').focus();
     return;
   }
+  // 无 opener → 管家主动发起第一句话
+  if (script.opener === '') {
+    addMessage('bot', '🎬 <b>沙盒场景：' + script.title + '</b><br><span style="font-size:11px;color:#888">管家正在根据场景信息主动联系你...</span>');
+    try {
+      const controller = new AbortController();
+      const to = setTimeout(() => controller.abort(), 90000);
+      const resp = await fetch('/chat', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({message: '(场景触发：' + (script.description || script.title) + '。请管家主动发起对话，给出第一条消息)', user_id: script.user}), signal: controller.signal});
+      clearTimeout(to);
+      const data = await resp.json();
+      addMessage('bot', data.reply || '管家正在思考...');
+    } catch(e) { addMessage('bot', '管家正在准备...请稍后再发消息'); }
+    document.getElementById('userInput').disabled = false;
+    document.getElementById('userInput').placeholder = '输入消息...';
+    return;
+  }
 
   // v1 兼容：原多步自动播放模式
   if (script.steps) {
