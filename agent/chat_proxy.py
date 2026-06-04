@@ -1652,26 +1652,29 @@ def set_scenario_time(scenario_id: str):
 
 @app.post("/api/fast-forward")
 def fast_forward_time(minutes: int = 10):
-    """快进场景时间"""
+    """快进场景时间（无场景时自动创建基准时间）"""
     global _scenario_time
     from datetime import datetime, timedelta
-    if _scenario_time:
-        # 解析当前场景时间并快进
-        try:
-            old = _scenario_time["time"]  # format: "06/01 周一 11:45"
-            parts = old.split(" ")
-            date_part = parts[0]  # "06/01"
-            time_part = parts[-1]  # "11:45"
-            month, day = date_part.split("/")
-            hour, minute = time_part.split(":")
-            dt = datetime(2026, int(month), int(day), int(hour), int(minute))
-            dt = dt + timedelta(minutes=minutes)
-            new_time = dt.strftime("%m/%d %a %H:%M")
-            _scenario_time["time"] = new_time
-            return {"ok": True, "new_time": new_time, "minutes": minutes}
-        except:
-            pass
-    return {"ok": True, "new_time": f"+{minutes}分", "minutes": minutes}
+    # 无场景时，以当前真实时间为基础创建一个
+    if not _scenario_time:
+        now = datetime.now()
+        _scenario_time = {"time": now.strftime("%m/%d %a %H:%M"), "description": "自由模式"}
+    # 解析并快进
+    try:
+        old = _scenario_time["time"]
+        parts = old.split(" ")
+        date_part = parts[0]
+        time_part = parts[-1]
+        month, day = date_part.split("/")
+        hour, minute = time_part.split(":")
+        dt = datetime(2026, int(month), int(day), int(hour), int(minute))
+        dt = dt + timedelta(minutes=minutes)
+        new_time = dt.strftime("%m/%d %a %H:%M")
+        _scenario_time["time"] = new_time
+        return {"ok": True, "new_time": new_time, "minutes": minutes}
+    except:
+        _scenario_time = None
+        return {"ok": False, "error": "时间解析失败"}
 
 @app.post("/api/scenario-reset")
 def reset_scenario_time():
