@@ -183,15 +183,15 @@ def build_system_prompt(user_id: str) -> str:
 ② 用户说的人就是那个人。用户说"领导""合作方"≠王总。不要自己套名字。除非用户明确提到名字，否则用"领导""合作方"等泛称。
 ③ 每行emoji开头。禁**加粗**、禁```代码块、禁`行内码`、禁JSON、禁API名称。工具数据理解后重述。
 ④ 结尾给完整结语陈述，绝不以问句收尾。禁止"要不要""需不需要""还有什么""可以吗""对吗""好吗"等。
-⑤ 并联调工具：天/雨/温度相关→必须先调get_weather+weather_alerts再开口。"天突然黑了""天阴了"≠已经下雨，查了再说。用户描述与工具结果矛盾时，以工具为准但不否定用户。暴雨天气必提醒：收阳台衣物+关窗+检查车是否在地下车库+避免骑行/步行远路。不要假设用户开了车——先问出行方式。
-⑥ 商务宴请：不提家人/孩子/宠物/团购/套餐。不用家人的口味偏好做推荐依据（大刘爱粤菜≠商务场景选粤菜）。推荐理由只用：用户本人偏好+商务礼仪+合作方背景。提包厢、停车、发票。
-⑦ 叫车时机：用户说"X点到"≠立刻叫车。先看现在几点+路程多久→反推出发时间→到点再叫。告知用户"现在X点，路程Y分钟，建议Z点出发，届时叫车"。
-⑧ 短距离(<1.5km或步行<15分钟)：建议步行，不问要不要打车。说"步行仅X分钟，比等车快"。除非暴雨/带老人/带娃/赶时间——此时确认距离太近是否仍需打车。
-⑨ 叫车后告知：车牌·颜色·品牌·司机·电话·等待时间·费用+自动查打车券。注册监控。
-⑩ 取号后注册排队监控，排队降到3桌内自动提醒。
-⑪ 千人千面：小琴精简果断，小冉温暖细致，小晴亲切省钱。
-⑫ 自主闭环：推荐→预订→路线→叫车→监控→提醒→评价→存记忆。不等用户追问。
-⑬ 你是AI管家不是真人：不能说"我去找她""我帮你买""我到了"等物理动作。可以说"帮您查找""帮您下单""车到了提醒您"。
+⑤ 天气相关必须先调get_weather+weather_alerts再开口。"天突然黑了""天阴了"≠已经下雨，查了再说。用户描述与工具结果矛盾时，以工具为准但不否定用户。暴雨必提醒：收衣物+关窗+避免远路。
+⑥ 用户说"X分钟后""半小时后"→立刻调schedule_create设提醒。用户说"帮我看看哪里有卖XX"→立刻调nearby_facilities。先做了再说，不先问。
+⑦ 先人一步：下雨了→同时查天气+找伞+设提醒+看雨后预报。不等用户一个个问。每件事都多想一步下一步。
+⑧ 商务宴请：不提家人/孩子/宠物/团购/套餐。不用家人的口味偏好做推荐依据。推荐理由只用用户本人偏好+商务礼仪+合作方背景。提包厢、停车、发票。
+⑨ 叫车时机：用户说"X点到"≠立刻叫。先算时间再叫。告知"现在X点，路程Y分钟，建议Z点出发"。
+⑩ 短距离(<1.5km或步行<15分钟)：建议步行。除非暴雨/老人/带娃/紧急。
+⑪ 叫车后告知全部信息+自动查券+注册监控。取号后注册排队监控。
+⑫ 千人千面：小琴精简果断，小冉温暖细致，小晴亲切省钱。
+⑬ AI不说物理动作（"我去找她""我帮你买"→"帮您查找""帮您下单"）。
 
 ----
 输出格式（每条推荐必须严格按模板，每行emoji开头，缺一项=不合格）:
@@ -701,10 +701,19 @@ def _is_raw_data_leak(text: str) -> bool:
         flags = item[2] if len(item) > 2 else 0
         if _re.search(pat, text, flags):
             return True
-    # 检测过短的单字行（工具参数泄露特征：多个连续单字行）
+    # 检测过短的单字行（工具参数泄露特征）
+    # 更完整的合法emoji列表，避免误杀正常回复
+    VALID_STARTERS = ('🥇','🥈','🥉','⭐','📍','💰','🏷','💡','✅','⚠','🎫',
+        '🚗','🚇','🚕','🚲','🚶','🚘','📋','⏱','🎯','👥',
+        '🌡','👔','🎒','🛵','🍜','▎','🔔','📅','📢','🔑',
+        '🌧','☀','☂','🌩','☔','🌤','⚡','❄','🍽','🏠',
+        '👶','🐶','💊','🏥','🏪','🅿','🍴','👵','🧥','🛒',
+        '☕','🍲','📌','📝','📊','🟢','🔴','🟡','💨','🩺',
+        '🚪','🌂','🧹','🔎','📈','🏃','🎬','💳','🧾')
     lines = [l for l in text.split('\n') if l.strip()]
-    short_lines = [l for l in lines if len(l.strip()) < 30 and not l.strip().startswith(('🥇','⭐','📍','💡','✅','🚗','🚇','🚕','🚲','🚶','🌡','👔','🎒','🛵','🍜','🎯','👥','🎫','🚕','🏷','▎','📋','🚘','⏱','💰'))]
-    if len(short_lines) >= 3 and len(short_lines) >= len(lines) * 0.5:
+    short_lines = [l for l in lines if len(l.strip()) < 30 and not l.strip().startswith(VALID_STARTERS)]
+    # 只有5行以上且>80%是短行才判定为泄露（防止误杀正常回复）
+    if len(short_lines) >= 5 and len(short_lines) >= len(lines) * 0.8:
         return True
     return False
 
@@ -820,6 +829,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       </select>
     </div>
     <button id="notif-bell" onclick="toggleNotifications()" style="background:none;border:none;font-size:18px;cursor:pointer;position:relative">🔔<span id="notif-badge" style="display:none;position:absolute;top:-5px;right:-5px;background:#dc2626;color:#fff;border-radius:50%;width:18px;height:18px;font-size:10px;line-height:18px;text-align:center">0</span></button>
+  </div>
+  <div id="weather-bar" style="background:#1a1a1a;border-bottom:1px solid #2a2a2a;padding:6px 20px;font-size:12px;color:#888;display:flex;gap:16px;align-items:center">
+    <span id="wb-time">--</span>
+    <span id="wb-weather">--</span>
+    <span id="wb-temp">--</span>
+    <span id="wb-aqi">--</span>
   </div>
   <div id="notif-panel" style="display:none;position:fixed;top:56px;right:10px;background:#1e1e1e;border:1px solid #333;border-radius:12px;padding:12px;max-height:300px;overflow-y:auto;z-index:200;width:300px;box-shadow:0 8px 24px rgba(0,0,0,0.5)">
     <div style="font-size:13px;font-weight:600;color:#fff;margin-bottom:8px">📬 管家提醒</div>
@@ -1079,6 +1094,20 @@ async function showProfile(uid) {
   } catch(e) { card.innerHTML = '<div style="color:#888">加载失败: ' + e.message + '</div>'; }
 }
 const BACKEND_URL = '/backend';
+// 实时天气栏
+async function updateWeatherBar() {
+  try {
+    const r = await fetch(BACKEND_URL + '/api/weather/current');
+    const w = await r.json();
+    const now = new Date();
+    document.getElementById('wb-time').textContent = now.toLocaleString('zh-CN', {month:'numeric',day:'numeric',weekday:'short',hour:'2-digit',minute:'2-digit'});
+    document.getElementById('wb-weather').textContent = w.condition || '--';
+    document.getElementById('wb-temp').textContent = (w.temperature||w.current_temp||'--') + '°C';
+    document.getElementById('wb-aqi').textContent = 'AQI ' + (w.aqi||'--');
+  } catch(e) {}
+}
+updateWeatherBar();
+setInterval(updateWeatherBar, 120000);
 </script>
 </div>
 </body>
