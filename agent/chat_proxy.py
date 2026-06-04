@@ -684,6 +684,9 @@ def _is_raw_data_leak(text: str) -> bool:
         (r'暂未找到完全匹配', 'no result leak'),
         (r'结合您之前的用餐记录', 'reasoning leak'),
         (r'让我回顾一下刚刚的对话', 'reasoning leak'),
+        (r'Mock.*后端.*连不上', 'backend leak'),
+        (r'后端.*不可用', 'backend leak'),
+        (r'数据库.*记录', 'backend leak'),
         (r'让我再试', 'reasoning'),
         # 裸工具参数（多行短文本 = 可能是工具参数泄露）
         (r'^(?:white_collar|parent|student|business|family|casual|date)\s*$', 'user/type param', _re.MULTILINE),
