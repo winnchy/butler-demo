@@ -970,9 +970,11 @@ async function triggerScene(id) {
     script = d.scenario;
   } catch(e) { toast('获取场景失败', 'err'); return; }
 
-  // 触发 WorldState 变化
+  // 触发 WorldState 变化 + 同步场景时间到前端
   try { await fetch(BACKEND_URL + '/admin/trigger/scenario/' + id, {method:'POST'}); } catch(e) {}
   try { await fetch(BACKEND_URL + '/admin/reset', {method:'POST'}); } catch(e) {}
+  // 同步场景时间上下文到天气栏
+  try { await fetch('/api/scenario-time/' + id, {method:'POST'}); } catch(e) {}
 
   // 清空聊天+历史
   document.getElementById('messages').innerHTML = '';
@@ -1027,8 +1029,12 @@ async function triggerScene(id) {
 }
 
 async function resetAll() {
-  try { await fetch(BACKEND_URL + '/admin/reset', {method:'POST'}); toast('已重置', 'ok'); addMessage('bot','所有场景已重置。'); }
-  catch(e) { toast('重置失败', 'err'); }
+  activeSceneId = null;
+  renderSceneButtons();
+  try { await fetch(BACKEND_URL + '/admin/reset', {method:'POST'}); } catch(e) {}
+  try { await fetch('/api/scenario-reset', {method:'POST'}); } catch(e) {}
+  toast('已重置', 'ok'); addMessage('bot','所有场景已重置。');
+  updateWeatherBar();
 }
 
 async function speedUp() {
@@ -1140,13 +1146,18 @@ const BACKEND_URL = '/backend';
 // 实时天气栏
 async function updateWeatherBar() {
   try {
-    const r = await fetch(BACKEND_URL + '/api/weather/current');
-    const w = await r.json();
-    const now = new Date();
-    document.getElementById('wb-time').textContent = now.toLocaleString('zh-CN', {month:'numeric',day:'numeric',weekday:'short',hour:'2-digit',minute:'2-digit'});
+    const [wr, tr] = await Promise.all([
+      fetch(BACKEND_URL + '/api/weather/current'),
+      fetch('/api/now')
+    ]);
+    const w = await wr.json();
+    const t = await tr.json();
+    document.getElementById('wb-time').textContent = t.time || new Date().toLocaleString('zh-CN', {month:'numeric',day:'numeric',weekday:'short',hour:'2-digit',minute:'2-digit'});
     document.getElementById('wb-weather').textContent = w.condition || '--';
     document.getElementById('wb-temp').textContent = (w.temperature||w.current_temp||'--') + '°C';
     document.getElementById('wb-aqi').textContent = 'AQI ' + (w.aqi||'--');
+    if (t.is_scenario) document.getElementById('wb-time').style.color = '#7c3aed';
+    else document.getElementById('wb-time').style.color = '#888';
   } catch(e) {}
 }
 updateWeatherBar();
@@ -1565,6 +1576,47 @@ def debug_env():
         "user_md_exists": os.path.exists(os.path.join(BUTLER_DIR, "USER.md")),
     }
 
+
+# ---- 场景时间上下文 ----
+_scenario_time = None  # 场景激活时存储 {time, description}
+
+@app.get("/api/now")
+def get_current_time():
+    """返回有效时间——场景激活时用场景时间，否则用真实时间"""
+    from datetime import datetime
+    if _scenario_time:
+        return {"time": _scenario_time.get("time", ""), "description": _scenario_time.get("description", ""), "is_scenario": True}
+    now = datetime.now()
+    return {"time": now.strftime("%m/%d %a %H:%M"), "description": "", "is_scenario": False}
+
+@app.post("/api/scenario-time/{scenario_id}")
+def set_scenario_time(scenario_id: str):
+    """前端触发场景时同步时间上下文"""
+    global _scenario_time
+    from datetime import datetime
+    # 根据场景ID设定合理的时间
+    time_map = {
+        "1": "06/01 周一 11:45", "2": "06/01 周六 14:30", "3": "06/16 周二 20:00",
+        "4": "06/05 周五 16:30", "5": "06/03 周三 19:00", "6": "06/06 周六 10:30",
+        "7": "06/10 周三 02:00", "8": "06/14 周日 21:00", "9": "06/08 周一 16:00",
+        "10": "06/04 周四 08:30", "11": "06/09 周二 07:30", "12": "06/30 周二 18:00",
+        "13": "06/20 周六 15:00", "14": "06/07 周日 10:00", "15": "06/11 周四 08:15",
+        "16": "06/12 周五 12:30", "17": "06/15 周一 20:30", "18": "06/13 周六 21:00",
+        "19": "06/02 周二 18:30", "20": "06/17 周三 11:00", "21": "06/18 周四 14:00",
+    }
+    s = SCENARIO_SCRIPTS.get(scenario_id, {})
+    _scenario_time = {
+        "time": time_map.get(scenario_id, datetime.now().strftime("%m/%d %a %H:%M")),
+        "description": s.get("title", ""),
+    }
+    return {"ok": True, "time": _scenario_time["time"]}
+
+@app.post("/api/scenario-reset")
+def reset_scenario_time():
+    """重置场景时间"""
+    global _scenario_time
+    _scenario_time = None
+    return {"ok": True}
 
 @app.get("/api/scenes")
 def list_all_scenes():
