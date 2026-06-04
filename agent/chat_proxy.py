@@ -165,6 +165,10 @@ def build_system_prompt(user_id: str) -> str:
 
     # ===== 3. 实时数据 =====
     ctx = []
+    # 注入当前时间（场景时间或真实时间）
+    from datetime import datetime as _dt
+    effective_time = _scenario_time["time"] if _scenario_time else _dt.now().strftime("%m/%d %a %H:%M")
+    ctx.append(f"现在: {effective_time}")
     try:
         w = requests.get(f"{BACKEND_URL}/api/weather/current", timeout=2).json()
         ctx.append(f"{w.get('condition','?')} {w.get('temperature','?')}°C AQI{w.get('aqi','?')}")
