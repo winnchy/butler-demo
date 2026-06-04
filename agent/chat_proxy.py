@@ -742,6 +742,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .scene-btn{display:block;width:100%;padding:7px 12px;border:1px solid #333;border-radius:6px;background:#222;color:#999;cursor:pointer;font-size:12px;margin-bottom:4px;transition:all .15s}
 .scene-btn:hover{border-color:#7c3aed;color:#c4b5fd}
 .scene-btn.complex{border-left:3px solid #dc2626}
+.scene-btn.active{border-color:#7c3aed;background:#2e1065;color:#c4b5fd}
 .divider{border:none;border-top:1px solid #2a2a2a;margin:8px 0}
 .main{flex:1;display:flex;flex-direction:column;max-width:calc(100% - 260px)}
 .header{padding:14px 20px;background:#1a1a1a;border-bottom:1px solid #2a2a2a;display:flex;align-items:center;gap:12px}
@@ -797,15 +798,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   <button class="user-btn" onclick="showProfile('student')" id="btn-student">🎓 小晴 · 大学生</button>
   <div id="user-profile-card" style="display:none;background:#1e1e1e;border-radius:8px;padding:12px;margin-top:8px;font-size:12px;color:#aaa;line-height:1.6"></div>
   <div class="divider"></div>
-  <div style="font-size:11px;color:#666;margin-bottom:4px">🎬 场景触发</div>
-  <button class="scene-btn" onclick="triggerScene('1')">1. 接待上级午餐</button>
-  <button class="scene-btn" onclick="triggerScene('2')">2. 逛街突遇暴雨</button>
-  <button class="scene-btn" onclick="triggerScene('7')">7. 乐乐凌晨发烧</button>
-  <button class="scene-btn complex" onclick="triggerScene('9')">9. 航班延误</button>
-  <button class="scene-btn" onclick="triggerScene('14')">14. 沙尘暴突袭</button>
-  <button class="scene-btn complex" onclick="triggerScene('15')">15. 早高峰地铁故障</button>
-  <button class="scene-btn complex" onclick="triggerScene('18')">18. 宠物急诊</button>
-  <button class="scene-btn" onclick="triggerScene('19')">19. 餐厅临时歇业</button>
+  <div style="font-size:11px;color:#666;margin-bottom:4px">🎬 场景触发（<span id="scene-count">0</span>个）</div>
+  <div id="scene-list"></div>
   <div class="divider"></div>
   <button class="scene-btn" onclick="speedUp()" style="color:#f59e0b">⚡ 加速测试（数据动态变化）</button>
   <button class="scene-btn" onclick="resetAll()" style="color:#fca5a5">重置所有场景</button>
@@ -858,7 +852,28 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 <script>
 let currentUser = 'white_collar';
+let activeSceneId = null;
 let isListening = false;
+
+// 从服务端加载场景列表
+let allScenes = {};
+async function loadScenes() {
+  try {
+    const r = await fetch('/api/scenes');
+    allScenes = await r.json();
+    renderSceneButtons();
+  } catch(e) { console.log('Scene load error'); }
+}
+function renderSceneButtons() {
+  const list = document.getElementById('scene-list');
+  const userScenes = Object.entries(allScenes).filter(([id, s]) => s.user === currentUser);
+  document.getElementById('scene-count').textContent = userScenes.length;
+  list.innerHTML = userScenes.map(([id, s]) => {
+    const isActive = id === activeSceneId;
+    return '<button class="scene-btn' + (isActive ? ' active' : '') + '" onclick="triggerScene(\'' + id + '\')">' + s.title + '</button>';
+  }).join('');
+}
+loadScenes();
 let recognition = null;
 
 if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
@@ -929,6 +944,8 @@ function addMessage(role, text, isTemp) {
 
 async function switchUser(uid) {
   currentUser = uid;
+  activeSceneId = null;
+  renderSceneButtons();  // 按用户过滤场景
   try { await fetch('/switch-user/' + uid, {method:'POST'}); } catch(e) {}
   const greetings = {
     white_collar: '你好小琴！今天北京晴28°C。中午想吃什么？',
@@ -942,6 +959,8 @@ async function switchUser(uid) {
 let isAutoPlaying = false;
 
 async function triggerScene(id) {
+  activeSceneId = id;
+  renderSceneButtons();  // 高亮当前按钮
   // 获取场景脚本
   let script;
   try {
@@ -1546,6 +1565,11 @@ def debug_env():
         "user_md_exists": os.path.exists(os.path.join(BUTLER_DIR, "USER.md")),
     }
 
+
+@app.get("/api/scenes")
+def list_all_scenes():
+    """返回所有场景（供前端动态渲染）"""
+    return {sid: {"title": s["title"], "user": s["user"], "opener": s["opener"]} for sid, s in SCENARIO_SCRIPTS.items()}
 
 @app.get("/api/scenario/{scenario_id}")
 def get_scenario_script(scenario_id: str):
