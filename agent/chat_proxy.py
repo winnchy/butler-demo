@@ -758,7 +758,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .header{padding:14px 20px;background:#fff;border-bottom:1px solid #e0d8f0;display:flex;align-items:center;gap:12px}
 .header .avatar{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#7c3aed,#a78bfa);display:flex;align-items:center;justify-content:center;font-size:18px}
 .header .title{font-size:15px;font-weight:600;color:#5b21b6}.header .subtitle{font-size:12px;color:#888}
-.messages{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:16px}
+.messages{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:16px;background:#fff}
 .msg{display:flex;gap:10px;max-width:85%}
 .msg.user{align-self:flex-end;flex-direction:row-reverse}
 .msg.bot{align-self:flex-start}
@@ -836,7 +836,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div class="avatar"></div>
     <div style="flex:1"><div class="title">全天候私人管家</div></div>
     <div class="user-switch">
-      <select id="userSelect" onchange="switchUser(this.value)">
+      <select id="userSelect" onchange="switchUser(this.value)" style="background:#f0ecff;color:#5b21b6;border:1px solid #c4b5fd;border-radius:6px;padding:4px 8px;font-size:13px">
         <option value="white_collar">小琴</option>
         <option value="parent">小冉</option>
         <option value="student">小晴</option>
