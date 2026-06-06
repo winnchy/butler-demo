@@ -690,6 +690,8 @@ def _is_raw_data_leak(text: str) -> bool:
         (r'系统这边.*没', 'backend leak'),
         (r'当前环境下.*没有.*API', 'backend leak'),
         (r'没有实时.*API.*可用', 'backend leak'),
+        (r'系统推荐的.*有限', 'backend leak'),
+        (r'凭知识给你推荐', 'backend leak'),
         (r'数据库.*记录', 'backend leak'),
         (r'让我再试', 'reasoning'),
         # 裸工具参数（多行短文本 = 可能是工具参数泄露）
@@ -1075,19 +1077,19 @@ async function triggerScene(id) {
 async function resetAll() {
   activeSceneId = null;
   renderSceneButtons();
+  document.getElementById('messages').innerHTML = '';
   try { await fetch(BACKEND_URL + '/admin/reset', {method:'POST'}); } catch(e) {}
   try { await fetch('/api/scenario-reset', {method:'POST'}); } catch(e) {}
-  toast('已重置', 'ok'); addMessage('bot','所有场景已重置。');
+  toast('已重置', 'ok');
   updateWeatherBar();
 }
 
 async function speedUp() {
   try {
-    const r = await fetch(BACKEND_URL + '/admin/speed-up', {method:'POST'});
-    const d = await r.json();
+    await fetch(BACKEND_URL + '/admin/speed-up', {method:'POST'});
     toast('数据已刷新！', 'ok');
+    await new Promise(r => setTimeout(r, 500));
     updateWeatherBar();
-    addMessage('bot', '⚡ 餐厅排队、天气、路况已随机变化～');
   } catch(e) { toast('加速失败', 'err'); }
 }
 
