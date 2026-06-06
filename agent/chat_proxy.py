@@ -32,17 +32,24 @@ def _monitor_bg():
                     m["last_check"] = now
                     if m["type"] == "restaurant_queue":
                         try:
-                            r = requests.get(f"{BACKEND_URL}/api/dining/queue?restaurant_id={m['restaurant_id']}", timeout=5)
-                            q = r.json()
-                            nq = q.get("current_queue", -1)
-                            oq = m.get("current_queue", -1)
+                            rid = m.get("restaurant_id", 0)
+                            if rid > 0:
+                                r = requests.get(f"{BACKEND_URL}/api/dining/queue?restaurant_id={rid}", timeout=5)
+                                q = r.json()
+                                nq = q.get("current_queue", -1)
+                                oq = m.get("current_queue", -1)
+                            else:
+                                # 模拟排队：每30秒减少0-1桌
+                                import random as _rand
+                                nq = max(0, m.get("current_queue", 5) - _rand.randint(0, 1))
+                                oq = m.get("current_queue", -1)
+                                m["wait_min"] = max(1, nq * 5)
                             if nq != oq and nq >= 0:
                                 m["current_queue"] = nq
-                                m["wait_min"] = q.get("estimated_wait_min", 0)
                                 if nq <= 3:
                                     heartbeat.add_notification("alert",
                                         f"📳 {m['restaurant_name']}快到了！前面{nq}桌，预计{nq*5}分钟，可以出发了～", uid, "dining")
-                                else:
+                                elif oq >= 0:  # 不是第一次
                                     heartbeat.add_notification("schedule",
                                         f"📊 {m['restaurant_name']}排队更新：前面{nq}桌（原{oq}桌），预计{nq*5}分钟", uid, "dining")
                         except: pass
@@ -391,10 +398,24 @@ def execute_tool(name: str, args: dict) -> str:
             if not rid:
                 # 模拟取号
                 import random
-                return f"已取号！🎫 号牌A{random.randint(20,60)}（{rname or '餐厅'}），当前等{random.randint(2,8)}桌，预计{random.randint(15,40)}分钟。建议开启排队监控"
+                q = random.randint(2, 8); w = random.randint(15, 40)
+                uid = args.get('user_id','')
+                MONITORS.setdefault(uid, []).append({
+                    "type": "restaurant_queue", "restaurant_id": 0, "restaurant_name": rname or '餐厅',
+                    "current_queue": q, "wait_min": w, "started_at": _time.time(), "last_check": 0,
+                })
+                return f"已取号！🎫 号牌A{random.randint(20,60)}（{rname or '餐厅'}），当前等{q}桌，预计{w}分钟。已开启排队监控，排到了提醒你"
             r = requests.post(f"{BACKEND_URL}/api/dining/take-number?restaurant_id={rid}&user_id={args.get('user_id','')}", timeout=10)
             d = r.json()
-            return f"已取号！🎫 号牌{d.get('ticket_number','?')}，当前等{d.get('current_queue',0)}桌，预计{d.get('estimated_wait_min',0)}分钟"
+            # 自动注册监控
+            uid = args.get('user_id','')
+            MONITORS.setdefault(uid, []).append({
+                "type": "restaurant_queue", "restaurant_id": rid,
+                "restaurant_name": d.get('restaurant_name', rname or f'餐厅{rid}'),
+                "current_queue": d.get('current_queue', 0), "wait_min": d.get('estimated_wait_min', 0),
+                "started_at": _time.time(), "last_check": 0,
+            })
+            return f"已取号！🎫 号牌{d.get('ticket_number','?')}，当前等{d.get('current_queue',0)}桌，预计{d.get('estimated_wait_min',0)}分钟。已开启排队监控，排到了提醒你"
         elif name == "restaurant_reserve":
             r = requests.post(f"{BACKEND_URL}/api/dining/reserve", params={"restaurant_id": args.get("restaurant_id",0), "user_id": args.get("user_id",""), "date": args.get("date",""), "time": args.get("time",""), "people": args.get("people",2)}, timeout=10)
             d = r.json()
