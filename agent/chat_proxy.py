@@ -1090,6 +1090,7 @@ async function triggerScene(id) {
 async function resetAll() {
   activeSceneId = null;
   renderSceneButtons();
+  pendingReminders = [];
   document.getElementById('messages').innerHTML = '';
   document.getElementById('userInput').value = '';
   document.getElementById('userInput').placeholder = '输入消息...';
