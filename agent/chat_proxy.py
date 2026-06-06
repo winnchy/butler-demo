@@ -769,8 +769,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .input-area{padding:14px 20px;background:#fff;border-top:1px solid #e0d8f0;display:flex;gap:10px}
 .input-area input{flex:1;padding:12px 16px;border:1px solid #ddd;border-radius:24px;background:#f8f6ff;color:#1a1a1a;font-size:14px;outline:none}
 .input-area input:focus{border-color:#2563eb}
-.input-area button{padding:10px 20px;border:none;border-radius:24px;background:#7c3aed;color:#fff;font-weight:600;cursor:pointer;font-size:14px}
-.input-area button.mic{background:#7c3aed;color:#fff;font-size:18px;padding:10px 14px}
+.input-area button{padding:10px 20px;border:none;border-radius:24px;background:#a78bfa;color:#fff;font-weight:600;cursor:pointer;font-size:14px}
+.input-area button.mic{background:#a78bfa;color:#fff;font-size:18px;padding:10px 14px}
 .input-area button:hover{opacity:.9}
 .toast{position:fixed;top:16px;right:16px;padding:10px 18px;border-radius:8px;font-size:13px;font-weight:600;z-index:999;opacity:0;transition:opacity .3s}
 .toast.show{opacity:1}
