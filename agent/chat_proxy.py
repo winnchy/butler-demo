@@ -740,7 +740,7 @@ CHAT_HTML = r"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Butler — 全天候私人管家</title>
+<title>LocalLife Butler — 全天候私人管家</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f4f0ff;color:#1a1a1a;height:100vh;display:flex}
@@ -799,10 +799,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <div class="app-container">
 
 <div class="sidebar" id="sidebar-el">
-  <h2>Butler</h2>
+  <h2>LocalLife Butler</h2>
   <div style="font-size:11px;color:#777;margin-bottom:8px">全天候私人管家 · 管理面板</div>
   <div class="divider"></div>
-  <div style="font-size:11px;color:#777;margin-bottom:4px">👤 当前用户</div>
+  <div style="font-size:11px;color:#777;margin-bottom:4px">👤 用户档案</div>
   <button class="user-btn active" onclick="showProfile('white_collar')" id="btn-wc">🏢 小琴 · 白领</button>
   <button class="user-btn" onclick="showProfile('parent')" id="btn-parent">👶 小冉 · 宝妈</button>
   <button class="user-btn" onclick="showProfile('student')" id="btn-student">🎓 小晴 · 大学生</button>
