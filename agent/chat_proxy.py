@@ -694,6 +694,10 @@ def _is_raw_data_leak(text: str) -> bool:
         (r'没有实时.*API.*可用', 'backend leak'),
         (r'系统推荐的.*有限', 'backend leak'),
         (r'凭知识给你推荐', 'backend leak'),
+        (r'查了.*记忆库', 'backend leak'),
+        (r'没有找到.*数据', 'backend leak'),
+        (r'餐厅ID', 'backend leak'),
+        (r'推荐系统', 'backend leak'),
         (r'数据库.*记录', 'backend leak'),
         (r'让我再试', 'reasoning'),
         # 裸工具参数（多行短文本 = 可能是工具参数泄露）
