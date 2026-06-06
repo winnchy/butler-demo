@@ -947,6 +947,9 @@ async function send() {
     clearInterval(timer);
     document.getElementById('temp-msg')?.remove();
     addMessage('bot', d.reply || d.response || '抱歉，出了点问题...');
+    // 自动提取提醒时间
+    const remindMatch = (d.reply || '').match(/(\d{1,2}:\d{2}).*?提醒/);
+    if (remindMatch) addReminder(remindMatch[1], (d.reply || '').replace(/<[^>]+>/g,'').substring(0,60));
   } catch(e) {
     clearInterval(timer);
     document.getElementById('temp-msg')?.remove();
@@ -1254,7 +1257,8 @@ async function updateWeatherBar() {
     else document.getElementById('wb-time').style.color = '#888';
   } catch(e) {}
 }
-// 前端时间自动流逝（每分钟+1分，每2分钟服务器同步校准）
+// 前端时间自动流逝+提醒触发
+let pendingReminders = [];  // [{time: '19:55', msg: '...'}]
 function tickTime() {
   const el = document.getElementById('wb-time');
   if (!el) return;
@@ -1263,9 +1267,26 @@ function tickTime() {
   if (!m) return;
   let h = parseInt(m[1]), min = parseInt(m[2]) + 1;
   if (min >= 60) { min = 0; h = (h + 1) % 24; }
-  el.textContent = txt.replace(/\d+:\d+/, String(h).padStart(2,'0') + ':' + String(min).padStart(2,'0'));
+  const newTime = String(h).padStart(2,'0') + ':' + String(min).padStart(2,'0');
+  el.textContent = txt.replace(/\d+:\d+/, newTime);
+  // 检查是否有提醒到期
+  const triggered = pendingReminders.filter(r => r.time === newTime);
+  if (triggered.length > 0) {
+    triggered.forEach(r => {
+      const badge = document.getElementById('notif-badge');
+      badge.style.display = 'block';
+      badge.textContent = (parseInt(badge.textContent) || 0) + 1;
+      const list = document.getElementById('notif-list');
+      list.innerHTML = '<div style=\"margin-bottom:6px;padding:6px;background:#f0ecff;border-radius:6px;border-left:3px solid #dc2626\"><div style=\"color:#888;font-size:10px\">⏰ ' + r.time + '</div><div>' + r.msg + '</div></div>' + list.innerHTML;
+    });
+    pendingReminders = pendingReminders.filter(r => r.time !== newTime);
+  }
 }
 setInterval(tickTime, 60000);
+// 管家设提醒时前端同步记录
+function addReminder(time, msg) {
+  pendingReminders.push({time: time, msg: msg});
+}
 setInterval(pollNotifications, 15000);  // 时间流逝时通知也跟着刷新
 async function initWelcome() {
   await updateWeatherBar();
