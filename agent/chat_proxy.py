@@ -971,19 +971,27 @@ async function switchUser(uid) {
   try { await fetch('/switch-user/' + uid, {method:'POST'}); } catch(e) {}
   // 重置场景状态
   try { await fetch('/api/scenario-reset', {method:'POST'}); } catch(e) {}
-  updateWeatherBar();
-  // 根据顶部时间生成应景问候
+  await updateWeatherBar();  // 等天气栏刷新完再取时间
+  // 根据顶部时间和天气生成应景问候
   const timeEl = document.getElementById('wb-time');
+  const weatherEl = document.getElementById('wb-weather');
+  const tempEl = document.getElementById('wb-temp');
   const displayTime = timeEl ? timeEl.textContent : '';
-  const isNoon = displayTime.includes('11:') || displayTime.includes('12:') || displayTime.includes('13:');
-  const isMorning = displayTime.includes('07:') || displayTime.includes('08:') || displayTime.includes('09:') || displayTime.includes('10:');
-  const isEvening = displayTime.includes('17:') || displayTime.includes('18:') || displayTime.includes('19:') || displayTime.includes('20:');
-  const greetings = {
-    white_collar: isNoon ? '小琴中午好！需要帮您安排午餐吗？' : isMorning ? '小琴早！今天通勤路况不错～' : isEvening ? '小琴辛苦了，下班路况帮您看着～' : '小琴好～有什么需要？',
-    parent: isNoon ? '小冉中午好！乐乐午睡了吗？' : isMorning ? '小冉早！今天送乐乐去早教吗？' : isEvening ? '小冉辛苦了，阿彬回来了吗？' : '小冉好～需要帮什么忙？',
-    student: isNoon ? '小晴中午好！食堂还是外卖？' : isMorning ? '小晴早！今天有课吗？' : isEvening ? '小晴晚上好！自习还是放松？' : '小晴好～有什么需要？'
+  const weather = weatherEl ? weatherEl.textContent : '';
+  const temp = tempEl ? tempEl.textContent : '';
+  const hour = parseInt(displayTime.match(/(\d+):/)?.[1] || '12');
+  const isMorning = hour >= 6 && hour < 11;
+  const isNoon = hour >= 11 && hour < 14;
+  const isAfternoon = hour >= 14 && hour < 18;
+  const isEvening = hour >= 18 && hour < 22;
+  const timeGreeting = isMorning ? '早上好' : isNoon ? '中午好' : isAfternoon ? '下午好' : isEvening ? '晚上好' : '夜深了';
+  const weatherInfo = weather && temp ? ' 今天' + weather + temp : '';
+  const g = {
+    white_collar: '小琴' + timeGreeting + '！' + weatherInfo,
+    parent: '小冉' + timeGreeting + '！' + weatherInfo,
+    student: '小晴' + timeGreeting + '！' + weatherInfo
   };
-  addMessage('bot', greetings[uid] || '已切换用户～');
+  addMessage('bot', g[uid] || '已切换用户～');
 }
 
 let isAutoPlaying = false;
