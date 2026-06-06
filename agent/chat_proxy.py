@@ -441,6 +441,8 @@ def execute_tool(name: str, args: dict) -> str:
         elif name == "schedule_create":
             r = requests.post(f"{BACKEND_URL}/api/schedule/create", json={"user_id": args.get("user_id",""), "title": args.get("title",""), "date": args.get("date",""), "time": args.get("time",""), "location": args.get("location",""), "notes": args.get("notes",""), "reminder_minutes": args.get("reminder_minutes",15)}, timeout=10)
             d = r.json()
+            # 立即添加到通知列表
+            heartbeat.add_notification("reminder", f"⏰ {args.get('time','')} {args.get('title','')}（提前{args.get('reminder_minutes',15)}分钟提醒）", args.get("user_id",""), "life")
             return f"⏰ 已设提醒！{args.get('time','')} {args.get('title','')}（提前{args.get('reminder_minutes',15)}分钟提醒）"
         elif name == "memory_save":
             r = requests.post(f"{BACKEND_URL}/api/memory/save", json={"user_id": args.get("user_id",""), "key": args.get("key",""), "value": args.get("value",""), "category": args.get("category","preference")}, timeout=10)
@@ -1264,6 +1266,7 @@ function tickTime() {
   el.textContent = txt.replace(/\d+:\d+/, String(h).padStart(2,'0') + ':' + String(min).padStart(2,'0'));
 }
 setInterval(tickTime, 60000);
+setInterval(pollNotifications, 15000);  // 时间流逝时通知也跟着刷新
 async function initWelcome() {
   await updateWeatherBar();
   const t = document.getElementById('wb-time');
