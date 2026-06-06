@@ -1086,6 +1086,8 @@ async function resetAll() {
   activeSceneId = null;
   renderSceneButtons();
   document.getElementById('messages').innerHTML = '';
+  document.getElementById('userInput').value = '';
+  document.getElementById('userInput').placeholder = '输入消息...';
   document.getElementById('notif-list').innerHTML = '<span style="color:#555">暂无新通知</span>';
   document.getElementById('notif-badge').style.display = 'none';
   document.getElementById('monitor-content').innerHTML = '<span style="color:#555">暂无活跃监控</span>';
@@ -1131,6 +1133,7 @@ async function changeWeather() {
     const d = await r.json();
     toast('天气已切换！', 'ok');
     updateWeatherBar();
+    pollNotifications();
     addMessage('bot', '🌤️ 天气已切换 → ' + (d.condition || '') + ' ' + (d.temp || '') + '°C');
   } catch(e) { toast('切换失败', 'err'); }
 }
