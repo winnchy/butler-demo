@@ -151,5 +151,5 @@ python chat_proxy.py
 - OpenClaw 版本：v2026.4.15
 - Skill 数量：5 个核心 + HEARTBEAT 心跳调度 + 3 个美团参考 Skill
 - 场景数量：21 个动态沙盒场景
-- MCP 工具：13 个（覆盖全部 5 个 Skill 的后端 API）
+- MCP 工具：21 个（覆盖全部 5 个 Skill 的后端 API）
 - 数据安全：所有用户数据为模拟数据，不收集真实个人信息

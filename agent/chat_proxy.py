@@ -743,38 +743,38 @@ CHAT_HTML = r"""<!DOCTYPE html>
 <title>Butler — 全天候私人管家</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#111;color:#e0e0e0;height:100vh;display:flex}
-.sidebar{width:260px;background:#1a1a1a;padding:16px;display:flex;flex-direction:column;gap:12px;border-right:1px solid #2a2a2a;overflow-y:auto}
-.sidebar h2{font-size:16px;color:#fff;margin-bottom:4px}
-.user-btn{display:block;width:100%;padding:10px 14px;border:1px solid #333;border-radius:8px;background:#222;color:#ccc;cursor:pointer;text-align:left;font-size:13px;margin-bottom:6px;transition:all .15s}
-.user-btn:hover{border-color:#555;background:#2a2a2a}
-.user-btn.active{border-color:#10b981;background:#064e3b;color:#6ee7b7}
-.scene-btn{display:block;width:100%;padding:7px 12px;border:1px solid #333;border-radius:6px;background:#222;color:#999;cursor:pointer;font-size:12px;margin-bottom:4px;transition:all .15s}
-.scene-btn:hover{border-color:#7c3aed;color:#c4b5fd}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f4f0ff;color:#1a1a1a;height:100vh;display:flex}
+.sidebar{width:260px;background:#fff;padding:16px;display:flex;flex-direction:column;gap:12px;border-right:1px solid #e0d8f0;overflow-y:auto}
+.sidebar h2{font-size:16px;color:#5b21b6;margin-bottom:4px}
+.user-btn{display:block;width:100%;padding:10px 14px;border:1px solid #ddd;border-radius:8px;background:#f8f6ff;color:#333;cursor:pointer;text-align:left;font-size:13px;margin-bottom:6px;transition:all .15s}
+.user-btn:hover{border-color:#7c3aed;background:#ede9fe}
+.user-btn.active{border-color:#7c3aed;background:#ede9fe;color:#059669}
+.scene-btn{display:block;width:100%;padding:7px 12px;border:1px solid #ddd;border-radius:6px;background:#f8f6ff;color:#555;cursor:pointer;font-size:12px;margin-bottom:4px;transition:all .15s}
+.scene-btn:hover{border-color:#7c3aed;color:#5b21b6}
 .scene-btn.complex{border-left:3px solid #dc2626}
-.scene-btn.active{border-color:#7c3aed;background:#2e1065;color:#c4b5fd}
+.scene-btn.active{border-color:#7c3aed;background:#ede9fe;color:#5b21b6}
 .divider{border:none;border-top:1px solid #2a2a2a;margin:8px 0}
 .main{flex:1;display:flex;flex-direction:column;max-width:calc(100% - 260px)}
-.header{padding:14px 20px;background:#1a1a1a;border-bottom:1px solid #2a2a2a;display:flex;align-items:center;gap:12px}
-.header .avatar{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#2563eb,#7c3aed);display:flex;align-items:center;justify-content:center;font-size:18px}
-.header .title{font-size:15px;font-weight:600;color:#fff}.header .subtitle{font-size:12px;color:#888}
+.header{padding:14px 20px;background:#fff;border-bottom:1px solid #e0d8f0;display:flex;align-items:center;gap:12px}
+.header .avatar{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#7c3aed,#a78bfa);display:flex;align-items:center;justify-content:center;font-size:18px}
+.header .title{font-size:15px;font-weight:600;color:#5b21b6}.header .subtitle{font-size:12px;color:#888}
 .messages{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:16px}
 .msg{display:flex;gap:10px;max-width:85%}
 .msg.user{align-self:flex-end;flex-direction:row-reverse}
 .msg.bot{align-self:flex-start}
 .msg .bubble{padding:12px 16px;border-radius:16px;font-size:14px;line-height:1.5;white-space:pre-wrap}
-.msg.user .bubble{background:#2563eb;color:#fff;border-bottom-right-radius:4px}
-.msg.bot .bubble{background:#262626;color:#e0e0e0;border-bottom-left-radius:4px}
+.msg.user .bubble{background:#7c3aed;color:#1a1a1a;border-bottom-right-radius:4px}
+.msg.bot .bubble{background:#f0ecff;color:#1a1a1a;border-bottom-left-radius:4px}
 .msg .avatar-mini{width:30px;height:30px;border-radius:50%;background:#333;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
-.input-area{padding:14px 20px;background:#1a1a1a;border-top:1px solid #2a2a2a;display:flex;gap:10px}
-.input-area input{flex:1;padding:12px 16px;border:1px solid #333;border-radius:24px;background:#222;color:#fff;font-size:14px;outline:none}
+.input-area{padding:14px 20px;background:#fff;border-top:1px solid #e0d8f0;display:flex;gap:10px}
+.input-area input{flex:1;padding:12px 16px;border:1px solid #ddd;border-radius:24px;background:#f8f6ff;color:#1a1a1a;font-size:14px;outline:none}
 .input-area input:focus{border-color:#2563eb}
-.input-area button{padding:10px 20px;border:none;border-radius:24px;background:#2563eb;color:#fff;font-weight:600;cursor:pointer;font-size:14px}
-.input-area button.mic{background:#333;font-size:18px;padding:10px 14px}
+.input-area button{padding:10px 20px;border:none;border-radius:24px;background:#2563eb;color:#1a1a1a;font-weight:600;cursor:pointer;font-size:14px}
+.input-area button.mic{background:#e0d8f0;font-size:18px;padding:10px 14px}
 .input-area button:hover{opacity:.9}
 .toast{position:fixed;top:16px;right:16px;padding:10px 18px;border-radius:8px;font-size:13px;font-weight:600;z-index:999;opacity:0;transition:opacity .3s}
 .toast.show{opacity:1}
-.toast.ok{background:#064e3b;color:#6ee7b7}
+.toast.ok{background:#ede9fe;color:#059669}
 .toast.err{background:#7f1d1d;color:#fca5a5}
 .typing{display:flex;gap:4px;padding:4px 0}
 .typing span{width:6px;height:6px;border-radius:50%;background:#666;animation:typing 1.4s infinite}
@@ -791,8 +791,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   .sidebar{display:none}.main{max-width:100%}
 }
 .sidebar.open{display:flex;position:fixed;top:0;left:0;height:100%;z-index:100;overflow-y:auto}
-.hamburger{background:none;border:none;color:#888;font-size:18px;cursor:pointer;padding:4px 8px}
-.user-switch select{padding:5px 8px;border:1px solid #333;border-radius:6px;background:#1a1a1a;color:#ccc;font-size:12px;cursor:pointer;outline:none}
+.hamburger{background:none;border:none;color:#555;font-size:18px;cursor:pointer;padding:4px 8px}
+.user-switch select{padding:5px 8px;border:1px solid #ddd;border-radius:6px;background:#1a1a1a;color:#333;font-size:12px;cursor:pointer;outline:none}
 </style>
 </head>
 <body>
@@ -800,15 +800,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 <div class="sidebar" id="sidebar-el">
   <h2>Butler</h2>
-  <div style="font-size:11px;color:#666;margin-bottom:8px">全天候私人管家 · 管理面板</div>
+  <div style="font-size:11px;color:#777;margin-bottom:8px">全天候私人管家 · 管理面板</div>
   <div class="divider"></div>
-  <div style="font-size:11px;color:#666;margin-bottom:4px">👤 当前用户</div>
+  <div style="font-size:11px;color:#777;margin-bottom:4px">👤 当前用户</div>
   <button class="user-btn active" onclick="showProfile('white_collar')" id="btn-wc">🏢 小琴 · 白领</button>
   <button class="user-btn" onclick="showProfile('parent')" id="btn-parent">👶 小冉 · 宝妈</button>
   <button class="user-btn" onclick="showProfile('student')" id="btn-student">🎓 小晴 · 大学生</button>
-  <div id="user-profile-card" style="display:none;background:#1e1e1e;border-radius:8px;padding:12px;margin-top:8px;font-size:12px;color:#aaa;line-height:1.6"></div>
+  <div id="user-profile-card" style="display:none;background:#f5f2ff;border-radius:8px;padding:12px;margin-top:8px;font-size:12px;color:#555;line-height:1.6"></div>
   <div class="divider"></div>
-  <div style="font-size:11px;color:#666;margin-bottom:4px">🎬 场景触发（<span id="scene-count">0</span>个）</div>
+  <div style="font-size:11px;color:#777;margin-bottom:4px">🎬 场景触发（<span id="scene-count">0</span>个）</div>
   <div id="scene-list"></div>
   <div class="divider"></div>
   <button class="scene-btn" onclick="speedUp()" style="color:#f59e0b">⚡ 加速数据变化</button>
@@ -823,11 +823,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   </div>
   <button class="scene-btn" onclick="resetAll()" style="color:#fca5a5">重置所有场景</button>
   <div class="divider"></div>
-  <div id="live-monitors" style="font-size:11px;color:#888">
-    <div style="color:#aaa;margin-bottom:4px">📡 实时监控</div>
-    <div id="monitor-content" style="color:#666">暂无活跃监控</div>
+  <div id="live-monitors" style="font-size:11px;color:#555">
+    <div style="color:#555;margin-bottom:4px">📡 实时监控</div>
+    <div id="monitor-content" style="color:#777">暂无活跃监控</div>
   </div>
-  <div style="margin-top:auto;font-size:10px;color:#444">Powered by OpenClaw<br>Agent v2.0</div>
+  <div style="margin-top:auto;font-size:10px;color:#888">Powered by OpenClaw<br>Agent v2.0</div>
 </div>
 
 <div class="main">
@@ -842,17 +842,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <option value="student">小晴</option>
       </select>
     </div>
-    <button id="notif-bell" onclick="toggleNotifications()" style="background:none;border:none;font-size:18px;cursor:pointer;position:relative">🔔<span id="notif-badge" style="display:none;position:absolute;top:-5px;right:-5px;background:#dc2626;color:#fff;border-radius:50%;width:18px;height:18px;font-size:10px;line-height:18px;text-align:center">0</span></button>
+    <button id="notif-bell" onclick="toggleNotifications()" style="background:none;border:none;font-size:18px;cursor:pointer;position:relative">🔔<span id="notif-badge" style="display:none;position:absolute;top:-5px;right:-5px;background:#dc2626;color:#1a1a1a;border-radius:50%;width:18px;height:18px;font-size:10px;line-height:18px;text-align:center">0</span></button>
   </div>
-  <div id="weather-bar" style="background:#1a1a1a;border-bottom:1px solid #2a2a2a;padding:6px 20px;font-size:12px;color:#888;display:flex;gap:16px;align-items:center">
+  <div id="weather-bar" style="background:#f0ecff;border-bottom:1px solid #e0d8f0;padding:6px 20px;font-size:12px;color:#555;display:flex;gap:16px;align-items:center">
     <span id="wb-time">--</span>
     <span id="wb-weather">--</span>
     <span id="wb-temp">--</span>
     <span id="wb-aqi">--</span>
   </div>
-  <div id="notif-panel" style="display:none;position:fixed;top:56px;right:10px;background:#1e1e1e;border:1px solid #333;border-radius:12px;padding:12px;max-height:300px;overflow-y:auto;z-index:200;width:300px;box-shadow:0 8px 24px rgba(0,0,0,0.5)">
-    <div style="font-size:13px;font-weight:600;color:#fff;margin-bottom:8px">📬 管家提醒</div>
-    <div id="notif-list" style="font-size:12px;color:#aaa">暂无新通知</div>
+  <div id="notif-panel" style="display:none;position:fixed;top:56px;right:10px;background:#f5f2ff;border:1px solid #ddd;border-radius:12px;padding:12px;max-height:300px;overflow-y:auto;z-index:200;width:300px;box-shadow:0 8px 24px rgba(0,0,0,0.5)">
+    <div style="font-size:13px;font-weight:600;color:#1a1a1a;margin-bottom:8px">📬 管家提醒</div>
+    <div id="notif-list" style="font-size:12px;color:#555">暂无新通知</div>
   </div>
   <div class="messages" id="messages">
     <div class="msg bot">
@@ -1020,7 +1020,7 @@ async function triggerScene(id) {
 
   // v2 模式：使用 opener 开场白 → 用户自由对话
   if (script.opener) {
-    addMessage('bot', '🎬 <b>沙盒场景：' + script.title + '</b><br><span style="font-size:11px;color:#888">场景已激活，下方是建议开场白，你可以修改或直接发送👇</span>');
+    addMessage('bot', '🎬 <b>沙盒场景：' + script.title + '</b><br><span style="font-size:11px;color:#555">场景已激活，下方是建议开场白，你可以修改或直接发送👇</span>');
     document.getElementById('userInput').value = script.opener;
     document.getElementById('userInput').disabled = false;
     document.getElementById('userInput').placeholder = '输入消息...';
@@ -1029,7 +1029,7 @@ async function triggerScene(id) {
   }
   // 无 opener → 管家主动发起第一句话
   if (script.opener === '') {
-    addMessage('bot', '🎬 <b>沙盒场景：' + script.title + '</b><br><span style="font-size:11px;color:#888">管家正在根据场景信息主动联系你...</span>');
+    addMessage('bot', '🎬 <b>沙盒场景：' + script.title + '</b><br><span style="font-size:11px;color:#555">管家正在根据场景信息主动联系你...</span>');
     try {
       const controller = new AbortController();
       const to = setTimeout(() => controller.abort(), 90000);
@@ -1048,7 +1048,7 @@ async function triggerScene(id) {
     isAutoPlaying = true;
     document.getElementById('userInput').disabled = true;
     document.getElementById('userInput').placeholder = '🔄 沙盒演示中...';
-    addMessage('bot', '🎬 <b>沙盒演示：' + script.title + '</b><br><span style="font-size:11px;color:#888">场景已激活，开始自动对话...</span>');
+    addMessage('bot', '🎬 <b>沙盒演示：' + script.title + '</b><br><span style="font-size:11px;color:#555">场景已激活，开始自动对话...</span>');
     for (let i = 0; i < script.steps.length; i++) {
       const step = script.steps[i];
       await new Promise(r => setTimeout(r, step.delay || 2000));
@@ -1078,8 +1078,12 @@ async function resetAll() {
   activeSceneId = null;
   renderSceneButtons();
   document.getElementById('messages').innerHTML = '';
+  document.getElementById('notif-list').innerHTML = '<span style="color:#555">暂无新通知</span>';
+  document.getElementById('notif-badge').style.display = 'none';
+  document.getElementById('monitor-content').innerHTML = '<span style="color:#555">暂无活跃监控</span>';
   try { await fetch(BACKEND_URL + '/admin/reset', {method:'POST'}); } catch(e) {}
   try { await fetch('/api/scenario-reset', {method:'POST'}); } catch(e) {}
+  try { await fetch('/api/notifications/read?user_id=' + currentUser, {method:'POST'}); } catch(e) {}
   toast('已重置', 'ok');
   updateWeatherBar();
 }
@@ -1147,7 +1151,7 @@ async function pollNotifications() {
     if (d.notifications && d.notifications.length > 0) {
       list.innerHTML = d.notifications.map(n => {
         const icon = n.type === 'alert' ? '⚠️' : n.type === 'reminder' ? '📅' : '📬';
-        return '<div style="margin-bottom:6px;padding:6px;background:#262626;border-radius:6px;border-left:3px solid ' + (n.type==='alert'?'#dc2626':'#2563eb') + '"><div style="color:#888;font-size:10px">' + icon + ' ' + n.time + '</div><div style="white-space:pre-wrap">' + n.message + '</div></div>';
+        return '<div style="margin-bottom:6px;padding:6px;background:#f0ecff;border-radius:6px;border-left:3px solid ' + (n.type==='alert'?'#dc2626':'#2563eb') + '"><div style="color:#555;font-size:10px">' + icon + ' ' + n.time + '</div><div style="white-space:pre-wrap">' + n.message + '</div></div>';
       }).join('');
     } else {
       list.innerHTML = '<div style="color:#555">暂无新通知</div>';
@@ -1204,20 +1208,20 @@ async function showProfile(uid) {
   try {
     const r = await fetch('/api/profile/' + uid);
     const d = await r.json();
-    if (!d.ok) { card.innerHTML = '<div style="color:#888">档案加载失败</div>'; return; }
+    if (!d.ok) { card.innerHTML = '<div style="color:#555">档案加载失败</div>'; return; }
 	    let rows = [];
-	    rows.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><div><span style="font-size:15px;font-weight:600;color:#fff">' + d.icon + ' ' + d.name + '</span><span style="color:#888;font-size:12px"> | ' + (d.age||'?') + '岁 | ' + (d.gender||'') + '</span></div><button onclick="closeProfileCard()" style="background:none;border:none;color:#666;cursor:pointer;font-size:16px">✕</button></div>');
-	    rows.push('<div style="color:#888;font-size:11px;margin-bottom:4px">' + d.role + '</div>');
+	    rows.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><div><span style="font-size:15px;font-weight:600;color:#1a1a1a">' + d.icon + ' ' + d.name + '</span><span style="color:#555;font-size:12px"> | ' + (d.age||'?') + '岁 | ' + (d.gender||'') + '</span></div><button onclick="closeProfileCard()" style="background:none;border:none;color:#777;cursor:pointer;font-size:16px">✕</button></div>');
+	    rows.push('<div style="color:#555;font-size:11px;margin-bottom:4px">' + d.role + '</div>');
 	    rows.push('<div style="border-top:1px solid #333;margin:4px 0"></div>');
-	    if (d.city) rows.push('<div style="margin-bottom:2px"><span style="color:#888">常驻：</span><span style="color:#ccc">' + d.city + '</span></div>');
-	    if (d.work) rows.push('<div style="margin-bottom:2px"><span style="color:#888">工作地址：</span><span style="color:#ccc">' + d.work + '</span></div>');
-	    if (d.school) rows.push('<div style="margin-bottom:2px"><span style="color:#888">学校地址：</span><span style="color:#ccc">' + d.school + '</span></div>');
-	    if (d.home) rows.push('<div style="margin-bottom:2px"><span style="color:#888">居住地址：</span><span style="color:#ccc">' + d.home + '</span></div>');
-	    if (d.family) rows.push('<div style="margin-bottom:2px"><span style="color:#888">家庭：</span><span style="color:#ccc">' + d.family + '</span></div>');
-	    if (d.taste) rows.push('<div style="margin-bottom:2px"><span style="color:#888">口味：</span><span style="color:#ccc">' + d.taste + '</span></div>');
-	    if (d.avoid) rows.push('<div style="margin-bottom:2px"><span style="color:#888">忌口：</span><span style="color:#ccc">' + d.avoid + '</span></div>');
+	    if (d.city) rows.push('<div style="margin-bottom:2px"><span style="color:#555">常驻：</span><span style="color:#333">' + d.city + '</span></div>');
+	    if (d.work) rows.push('<div style="margin-bottom:2px"><span style="color:#555">工作地址：</span><span style="color:#333">' + d.work + '</span></div>');
+	    if (d.school) rows.push('<div style="margin-bottom:2px"><span style="color:#555">学校地址：</span><span style="color:#333">' + d.school + '</span></div>');
+	    if (d.home) rows.push('<div style="margin-bottom:2px"><span style="color:#555">居住地址：</span><span style="color:#333">' + d.home + '</span></div>');
+	    if (d.family) rows.push('<div style="margin-bottom:2px"><span style="color:#555">家庭：</span><span style="color:#333">' + d.family + '</span></div>');
+	    if (d.taste) rows.push('<div style="margin-bottom:2px"><span style="color:#555">口味：</span><span style="color:#333">' + d.taste + '</span></div>');
+	    if (d.avoid) rows.push('<div style="margin-bottom:2px"><span style="color:#555">忌口：</span><span style="color:#333">' + d.avoid + '</span></div>');
 	    card.innerHTML = rows.join('');
-  } catch(e) { card.innerHTML = '<div style="color:#888">加载失败: ' + e.message + '</div>'; }
+  } catch(e) { card.innerHTML = '<div style="color:#555">加载失败: ' + e.message + '</div>'; }
 }
 const BACKEND_URL = '/backend';
 // 实时天气栏
