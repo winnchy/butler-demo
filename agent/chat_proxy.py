@@ -1252,6 +1252,18 @@ async function updateWeatherBar() {
     else document.getElementById('wb-time').style.color = '#888';
   } catch(e) {}
 }
+// 前端时间自动流逝（每分钟+1分，每2分钟服务器同步校准）
+function tickTime() {
+  const el = document.getElementById('wb-time');
+  if (!el) return;
+  const txt = el.textContent || '';
+  const m = txt.match(/(\d+):(\d+)/);
+  if (!m) return;
+  let h = parseInt(m[1]), min = parseInt(m[2]) + 1;
+  if (min >= 60) { min = 0; h = (h + 1) % 24; }
+  el.textContent = txt.replace(/\d+:\d+/, String(h).padStart(2,'0') + ':' + String(min).padStart(2,'0'));
+}
+setInterval(tickTime, 60000);
 async function initWelcome() {
   await updateWeatherBar();
   const t = document.getElementById('wb-time');
