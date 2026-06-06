@@ -857,7 +857,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   <div class="messages" id="messages">
     <div class="msg bot">
       <div class="avatar-mini"></div>
-      <div class="bubble">早上好！我是你的全天候私人管家～<br>今天北京晴28°C。中午想吃什么？</div>
+      <div class="bubble" id="welcome-msg">加载中...</div>
     </div>
   </div>
   <div class="input-area">
@@ -1249,7 +1249,19 @@ async function updateWeatherBar() {
     else document.getElementById('wb-time').style.color = '#888';
   } catch(e) {}
 }
-updateWeatherBar();
+async function initWelcome() {
+  await updateWeatherBar();
+  const t = document.getElementById('wb-time');
+  const w = document.getElementById('wb-weather');
+  const tp = document.getElementById('wb-temp');
+  const displayTime = t ? t.textContent : '';
+  const weather = w ? w.textContent : '晴';
+  const temp = tp ? tp.textContent : '--';
+  const hour = parseInt((displayTime.match(/(\d+):/) || ['','12'])[1] || '12');
+  const timeGreeting = hour>=6&&hour<11?'早上好':hour>=11&&hour<14?'中午好':hour>=14&&hour<18?'下午好':hour>=18&&hour<22?'晚上好':'夜深了';
+  document.getElementById('welcome-msg').innerHTML = timeGreeting + '！我是你的全天候私人管家～<br>今天' + weather + temp + '。有什么需要？';
+}
+initWelcome();
 setInterval(updateWeatherBar, 120000);
 </script>
 </div>
