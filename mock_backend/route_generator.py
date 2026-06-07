@@ -787,7 +787,7 @@ def main():
     # 1. 加载富化的地铁站数据
     metro_path = "data/enriched/metro_stations.json"
     if not os.path.exists(metro_path):
-        print("[!] 请先运行 enrich_pois.py 生成地铁站数据")
+        print("[!] 请先运行 data_generator.py 生成地铁站数据")
         return
 
     with open(metro_path, "r", encoding="utf-8") as f:

@@ -50,49 +50,49 @@
 ## 项目结构
 
 ```
-├── butler/                     # OpenClaw 工作区（Agent 标准文件）
-│   ├── SOUL.md                 # Agent 灵魂设定
-│   ├── HEARTBEAT.md            # 心跳调度 Skill
-│   ├── USER.md                 # 当前用户画像（运行时从 profiles/ 复制）
-│   ├── MEMORY.md               # 当前用户记忆（运行时从 profiles/ 复制）
-│   ├── wardrobe.md             # 当前用户衣橱（运行时从 profiles/ 复制）
-│   ├── switch_user.py          # 用户切换脚本（CLI）
-│   ├── skills/                 # 8 个 Skill（OpenClaw 插件格式）
-│   │   ├── dining-butler/      #   餐饮管家
-│   │   ├── mobility-butler/    #   出行管家
-│   │   ├── outfit-advisor/     #   穿搭管家
-│   │   ├── city-explorer/      #   活动管家
-│   │   └── life-organizer/     #   日程管家
-│   └── profiles/               # 三用户模板库
-│       ├── users/              #   用户画像（每人一份）
-│       └── memories/           #   用户记忆（每人一份）
+├── butler/                          # Agent 工作区（OpenClaw 标准文件格式）
+│   ├── SOUL.md                      # Agent 人格与行为准则
+│   ├── HEARTBEAT.md                 # 定时调度规则
+│   ├── USER.md                      # 当前用户画像（运行时切换）
+│   ├── MEMORY.md                    # 当前用户长期记忆（运行时切换）
+│   ├── wardrobe.md                  # 当前用户衣橱清单（运行时切换）
+│   ├── switch_user.py               # 用户切换工具（CLI）
+│   ├── skills/                      # Skill 定义（OpenClaw 插件规范）
+│   │   ├── dining-butler/           #   餐饮管家
+│   │   ├── mobility-butler/         #   出行管家
+│   │   ├── outfit-advisor/          #   穿搭管家
+│   │   ├── city-explorer/           #   城市探索
+│   │   └── life-organizer/          #   日程管理
+│   └── profiles/                    # 三用户模板库
+│       ├── users/                   #   用户画像
+│       └── memories/                #   用户记忆
 │
-├── agent/                      # Service 2: Butler Agent
-│   ├── chat_proxy.py           # 主程序：Chat API + H5 前端 + 26 工具 + Agent Loop
-│   ├── mcp_bridge.py           # MCP Bridge（26 工具 → 后端 API）
-│   ├── heartbeat.py            # HEARTBEAT 定时调度引擎
-│   ├── guardian.py             # GUARDIAN 事件检测引擎
-│   ├── scenario_scripts.py     # 21 个沙盒场景定义
-│   ├── start.sh                # 启动脚本（Gateway + MCP + Chat Proxy）
-│   ├── Dockerfile              # Node.js + Python + OpenClaw 镜像
-│   └── requirements.txt        # Python 依赖
+├── agent/                           # Butler Agent 服务
+│   ├── chat_proxy.py                # 核心程序：Chat API + 前端 + 26 工具 + Agent Loop
+│   ├── mcp_bridge.py                # MCP Bridge：26 工具 → Backend API
+│   ├── heartbeat.py                 # HEARTBEAT 定时调度引擎
+│   ├── guardian.py                  # GUARDIAN 事件检测引擎
+│   ├── scenario_scripts.py          # 21 沙盒场景定义
+│   ├── start.sh                     # 服务启动脚本
+│   ├── Dockerfile                   # 容器镜像（Node.js + Python + OpenClaw）
+│   └── requirements.txt             # Python 依赖清单
 │
-├── mock_backend/               # Service 1: 动态模拟后端
-│   ├── main_api.py             # FastAPI 入口
-│   ├── config.py               # 全局配置 + 场景触发器
-│   ├── world_state.py          # WorldState 动态引擎
-│   ├── route_generator.py      # 路径规划（Dijkstra + 371 站地铁）
-│   ├── enrich_pois.py          # POI 数据生成
-│   ├── api_routes/             # API 路由模块
-│   │   ├── dining_routes.py    #   餐饮 API
-│   │   ├── mobility_routes.py  #   出行 API
-│   │   ├── outfit_routes.py    #   穿搭 + 天气 API
-│   │   ├── city_routes.py      #   活动 + 购物 API
-│   │   ├── life_routes.py      #   日程 + 记忆 API
-│   │   └── admin_routes.py     #   管理 API（场景/加速/重置）
-│   └── Dockerfile              # Python 镜像
+├── mock_backend/                    # 动态数据后端服务（模拟环境）
+│   ├── main_api.py                  # FastAPI 应用入口
+│   ├── config.py                    # 全局配置与场景触发器
+│   ├── world_state.py               # WorldState 动态世界引擎
+│   ├── route_generator.py           # 路径规划引擎（Dijkstra + 371 站地铁网络）
+│   ├── data_generator.py            # 模拟数据生成器
+│   ├── api_routes/                  # REST API 路由
+│   │   ├── dining_routes.py         #   餐饮服务
+│   │   ├── mobility_routes.py       #   出行服务
+│   │   ├── outfit_routes.py         #   天气与穿搭
+│   │   ├── city_routes.py           #   活动与购物
+│   │   ├── life_routes.py           #   日程与记忆
+│   │   └── admin_routes.py          #   管理接口
+│   └── Dockerfile                   # 容器镜像（Python）
 │
-├── railway.toml                # Railway 部署配置
+├── railway.toml                     # Railway 部署配置
 └── README.md
 ```
 
@@ -104,7 +104,7 @@
 # 终端 1: 启动 Mock Backend (Service 1)
 cd mock_backend
 pip install fastapi uvicorn requests
-python enrich_pois.py && python route_generator.py
+python data_generator.py && python route_generator.py
 python main_api.py
 # → http://localhost:8000/docs        API 文档
 # → http://localhost:8000/admin/dashboard  管理面板

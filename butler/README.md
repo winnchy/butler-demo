@@ -31,7 +31,7 @@ butler/
 ```bash
 cd mock_backend
 pip install fastapi uvicorn
-python enrich_pois.py          # 一次性：生成丰富化数据
+python data_generator.py          # 一次性：生成丰富化数据
 python route_generator.py       # 一次性：构建交通网络
 python main.py                  # 启动 API 服务 → http://localhost:8000
 ```

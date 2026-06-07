@@ -9,7 +9,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY mock_backend/ .
 
 # 生成模拟数据
-RUN python enrich_pois.py && python route_generator.py
+RUN python data_generator.py && python route_generator.py
 
 # Railway 通过 $PORT 注入端口
 # Force cache miss — v2 diagnostic update
