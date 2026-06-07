@@ -171,14 +171,15 @@ TOOLS = [
     # === dining-butler (补充) ===
     {
         "name": "restaurant_take_number",
-        "description": "线上取号。用户选定餐厅后主动取号，返回号牌和预计等待时间",
+        "description": "线上取号。用户选定餐厅后主动取号，返回号牌和预计等待时间。可传restaurant_id或restaurant_name。",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "restaurant_id": {"type": "integer"},
+                "restaurant_name": {"type": "string"},
                 "user_id": {"type": "string"}
             },
-            "required": ["restaurant_id", "user_id"]
+            "required": ["user_id"]
         }
     },
     {
