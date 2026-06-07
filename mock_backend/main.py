@@ -228,7 +228,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <div class="toast" id="toast"></div>
 
 <script>
-const DEPLOY_MODE = 'standalone';  // 'standalone'=直连DeepSeek+13个Mock工具  'openclaw'=通过OpenClaw Gateway
+const DEPLOY_MODE = 'standalone';  // 'standalone'=直连DeepSeek+26个Mock工具  'openclaw'=通过OpenClaw Gateway
 const OPENCLAW_CHAT_URL = '/openclaw/chat';  // 后端转发到 OpenClaw
 let currentUser = 'white_collar';
 let isListening = false;
@@ -571,7 +571,7 @@ async def _fallback_chat(msg: str, user_id: str) -> dict:
 #   当前 Railway 免费层(512MB)无法同时运行 OpenClaw Gateway + Mock Backend。
 #   Gateway 已验证可正常启动（日志: http server listening, 15 skills ready），
 #   但因内存限制会在处理请求时 OOM。故前端 DEPLOY_MODE='standalone'，
-#   直接走 /chat 端点 → DeepSeek API + 13 个 Mock 工具。
+#   直接走 /chat 端点 → DeepSeek API + 26 个 Mock 工具。
 #   架构完全遵循 OpenClaw 插件规范（SOUL.md/SKILL.md/USER.md）。
 #   升级到 ≥1GB 容器后可启用本端点。
 # ================================================================
@@ -634,7 +634,7 @@ def health():
         "status": "ok",
         "ws_active": world_state._running if world_state else False,
         "api_key_set": bool(key),
-        "mode": "DeepSeek直连 + 13个Mock API工具",
+        "mode": "DeepSeek直连 + 26个Mock API工具",
         "openclaw_gateway": "本地/Docker可用，Railway 512MB需注释掉start.sh中Gateway启动",
     }
 

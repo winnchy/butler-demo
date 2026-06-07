@@ -2,7 +2,7 @@
 Chat Proxy Server — Service 2 (OpenClaw Agent 入口)
 - 提供 H5 聊天界面 (GET /)
 - /chat → 转发到 OpenClaw Gateway (localhost:18789)
-- 若 Gateway 不可用 → 降级直连 DeepSeek (读取全部 butler/ 文件 + 13 工具)
+- 若 Gateway 不可用 → 降级直连 DeepSeek (读取全部 butler/ 文件 + 26 工具)
 - 工具调用走 BACKEND_URL (Service 1)
 """
 

@@ -13,7 +13,7 @@ import requests
 BACKEND_URL = os.environ.get("BACKEND_URL", "http://localhost:8000")
 REQUEST_TIMEOUT = int(os.environ.get("REQUEST_TIMEOUT", "10"))
 
-# ---- 工具定义 (13个, 对应 mock_backend 的全部 API) ----
+# ---- 工具定义 (26个, 对应 mock_backend 的全部 API) ----
 
 TOOLS = [
     # === dining-butler ===
