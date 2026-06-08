@@ -168,7 +168,7 @@ python chat_proxy.py
 
 - 命题：基于 OpenClaw 的本地生活「全天候私人管家」
 - OpenClaw 版本：v2026.5.28（最低要求 v2026.4.24）
-- Skill 数量：5 个核心 + HEARTBEAT + GUARDIAN + 3 个参考 Skill
+- Skill 数量：5 个核心 Skill + HEARTBEAT 定时调度 + GUARDIAN 事件守护
 - 场景数量：21 个动态沙盒场景（小琴 8 + 小冉 6 + 小晴 7）
 - 工具数量：26 个（覆盖全部 5 个 Skill 的后端 API）
 - 数据安全：所有用户数据为模拟数据，不收集真实个人信息
