@@ -8,13 +8,13 @@
 
 | 服务 | URL | 说明 |
 |------|-----|------|
-| **Butler Agent** | `https://butler-agent-xxx.up.railway.app` | 评委交互入口（OpenClaw + Chat UI） |
+| **Butler Agent** | `https://butler-agent-xxx.up.railway.app` | 用户交互入口（OpenClaw + Chat UI） |
 | Mock Backend | `https://mock-backend-xxx.up.railway.app` | 动态数据 API（内部） |
 
 ## 架构
 
 ```
-评委浏览器
+用户浏览器
     │
     ▼
 ┌──────────────────────────────────────────┐
@@ -115,7 +115,7 @@ pip install fastapi uvicorn openai requests httpx
 set OPENAI_API_KEY=sk-xxx           # DeepSeek API Key
 set BACKEND_URL=http://localhost:8000
 python chat_proxy.py
-# → http://localhost:8080            H5 聊天界面（评委入口）
+# → http://localhost:8080            H5 聊天界面（用户入口）
 ```
 
 ### 部署到 Railway
@@ -135,7 +135,7 @@ python chat_proxy.py
    - `OPENAI_BASE_URL` = `https://api.deepseek.com/v1`
    - `BACKEND_URL` = Service 1 的域名
 4. Networking → Generate Domain
-5. 评委访问 Service 2 的域名
+5. 用户访问 Service 2 的域名
 
 ## 核心特性
 
